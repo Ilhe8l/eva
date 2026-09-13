@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "eva-local"
+version = "0.1.0"
+description = "Local voice assistant with reviewed host actions and extensions"
+requires-python = ">=3.12"
+dependencies = [
+    "deepagents>=0.7.9,<1",
+    "langchain-openai>=1,<2",
+    "langgraph-checkpoint-sqlite>=3,<4",
+]
+
+[project.optional-dependencies]
+voice = [
+    "faster-whisper>=1.2,<2",
+    "kokoro>=0.9.4,<1",
+    "sounddevice>=0.5,<1",
+    "soundfile>=0.13,<1",
+]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+eva = "eva.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eva"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
