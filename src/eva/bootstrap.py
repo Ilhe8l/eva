@@ -10,6 +10,7 @@ from eva.adapters.agent import DeepAgentAdapter
 from eva.adapters.extensions import ExtensionStore
 from eva.adapters.host import HostCommandRunner
 from eva.adapters.memory import MemoryStore
+from eva.adapters.patches import PatchStore
 from eva.application.session import EvaSession
 
 
@@ -38,6 +39,7 @@ class Application:
     session: EvaSession
     extensions: ExtensionStore
     memory: MemoryStore
+    patches: PatchStore
 
 
 @contextmanager
@@ -45,6 +47,7 @@ def bootstrap(settings: Settings, approval) -> Iterator[Application]:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     extensions = ExtensionStore(settings.data_dir)
     memory = MemoryStore(settings.data_dir)
+    patches = PatchStore(settings.data_dir, Path.cwd())
     runner = HostCommandRunner()
     checkpoint_path = settings.data_dir / "checkpoints.sqlite"
     with SqliteSaver.from_conn_string(str(checkpoint_path)) as checkpointer:
@@ -56,9 +59,11 @@ def bootstrap(settings: Settings, approval) -> Iterator[Application]:
             runner=runner,
             extensions=extensions,
             memory=memory,
+            patches=patches,
         )
         yield Application(
             session=EvaSession(agent=agent, approval=approval),
             extensions=extensions,
             memory=memory,
+            patches=patches,
         )

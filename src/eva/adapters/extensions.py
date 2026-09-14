@@ -46,8 +46,10 @@ class ExtensionStore:
     def read_proposal(self, name: str) -> Extension:
         return self._read(self._path(self.proposals, name))
 
-    def activate(self, name: str) -> Extension:
+    def activate(self, name: str, expected: Extension | None = None) -> Extension:
         proposal = self.read_proposal(name)
+        if expected is not None and proposal != expected:
+            raise ValueError("Proposal changed since review; inspect it again")
         self._validate(proposal.name, proposal.description, proposal.source)
         destination = self._path(self.active, name)
         destination.write_text(

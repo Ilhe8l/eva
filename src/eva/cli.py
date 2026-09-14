@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 from eva.adapters.voice import KokoroSpeaker, Microphone, WhisperTranscriber
@@ -32,10 +33,34 @@ def _activate(extensions, name: str) -> None:
     except (EOFError, KeyboardInterrupt):
         answer = ""
     if answer in {"y", "yes", "s", "sim"}:
-        extensions.activate(name)
+        extensions.activate(name, expected=proposal)
         print("Activated. Eva can use the tool on the next turn, with approval.")
     else:
         print("Proposal remains inactive.")
+
+
+def _apply_patch(patches, name: str) -> bool:
+    try:
+        proposal = patches.read(name)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Cannot open patch: {exc}")
+        return False
+    print(f"\n{name}: {proposal.description}\n")
+    print(proposal.diff)
+    try:
+        answer = input("Apply this exact patch and run tests? [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        answer = ""
+    if answer not in {"y", "yes", "s", "sim"}:
+        print("Patch remains unapplied.")
+        return False
+    try:
+        success, detail = patches.apply(name, expected=proposal)
+    except (OSError, ValueError) as exc:
+        print(f"Patch could not be applied: {exc}")
+        return False
+    print(detail)
+    return success
 
 
 def main() -> None:
@@ -57,7 +82,8 @@ def main() -> None:
     transcriber = WhisperTranscriber(model_name=args.whisper_model)
     speak = args.speak
 
-    print("Eva ready. Commands: :record [seconds], :speak on|off, :tools, :activate NAME, :quit")
+    print("Eva ready. Commands: :record [seconds], :speak on|off, :tools, :activate NAME, :patches, :apply NAME, :quit")
+    restart = False
     with bootstrap(settings, TerminalApproval()) as app:
         while True:
             try:
@@ -72,6 +98,14 @@ def main() -> None:
             if message == ":tools":
                 print("Active:", ", ".join(item.name for item in app.extensions.list_active()) or "none")
                 print("Proposals:", ", ".join(app.extensions.list_proposals()) or "none")
+                continue
+            if message == ":patches":
+                print("Source proposals:", ", ".join(app.patches.list()) or "none")
+                continue
+            if message.startswith(":apply "):
+                if _apply_patch(app.patches, message.split(maxsplit=1)[1]):
+                    restart = True
+                    break
                 continue
             if message.startswith(":activate "):
                 _activate(app.extensions, message.split(maxsplit=1)[1])
@@ -105,6 +139,10 @@ def main() -> None:
                     speaker.speak(reply)
                 except (ImportError, OSError, ValueError) as exc:
                     print(f"Voice output unavailable: {exc}")
+
+    if restart:
+        print("Restarting Eva with the updated source...")
+        os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
 if __name__ == "__main__":
