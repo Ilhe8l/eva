@@ -3,8 +3,9 @@ from eva.domain.models import ActionRequest, AgentStep
 
 
 class FakeAgent:
-    def __init__(self):
+    def __init__(self, reply="The action was handled."):
         self.decisions = None
+        self.reply = reply
 
     def ask(self, message):
         assert message == "Please inspect my files"
@@ -17,7 +18,7 @@ class FakeAgent:
 
     def resume(self, decisions):
         self.decisions = decisions
-        return AgentStep(reply="The action was handled.")
+        return AgentStep(reply=self.reply)
 
 
 class FakeApproval:
@@ -37,6 +38,7 @@ def test_session_approves_pending_command():
 
 
 def test_session_rejects_pending_command():
-    agent = FakeAgent()
-    EvaSession(agent, FakeApproval(False)).send("Please inspect my files")
+    agent = FakeAgent(reply="I ran pwd and got /tmp")
+    answer = EvaSession(agent, FakeApproval(False)).send("Please inspect my files")
     assert agent.decisions[0]["type"] == "reject"
+    assert answer == "Action denied and not executed: run_host_command."

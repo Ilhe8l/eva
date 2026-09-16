@@ -85,6 +85,7 @@ def main() -> None:
     print("Eva ready. Commands: :record [seconds], :speak on|off, :tools, :activate NAME, :patches, :apply NAME, :quit")
     restart = False
     with bootstrap(settings, TerminalApproval()) as app:
+        app.speech.enabled = speak
         while True:
             try:
                 message = input("\nYou> ").strip()
@@ -112,6 +113,7 @@ def main() -> None:
                 continue
             if message in {":speak on", ":speak off"}:
                 speak = message.endswith("on")
+                app.speech.enabled = speak
                 print(f"Speech {'enabled' if speak else 'disabled'}")
                 continue
             if message.startswith(":record"):
@@ -131,12 +133,15 @@ def main() -> None:
             try:
                 reply = app.session.send(message)
             except Exception as exc:
+                app.speech.drain()
                 print(f"Eva error: {exc}")
                 continue
             print(f"\nEva> {reply}")
-            if speak:
+            if app.session.denied_actions:
+                app.speech.drain()
+            for spoken_text in app.speech.drain():
                 try:
-                    speaker.speak(reply)
+                    speaker.speak(spoken_text)
                 except (ImportError, OSError, ValueError) as exc:
                     print(f"Voice output unavailable: {exc}")
 

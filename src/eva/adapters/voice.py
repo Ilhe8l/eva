@@ -2,6 +2,28 @@ import tempfile
 from pathlib import Path
 
 
+class SpeechOutbox:
+
+    def __init__(self) -> None:
+        self.enabled = False
+        self._messages: list[str] = []
+
+    def enqueue(self, text: str) -> str:
+        if not self.enabled:
+            return "Speech is disabled in the terminal. Continue with a text reply."
+        spoken = text.strip()
+        if not spoken:
+            return "No speech was queued because the text was empty."
+        if len(spoken) > 1200:
+            return "Speech was not queued: keep spoken content under 1200 characters."
+        self._messages.append(spoken)
+        return "Speech queued for playback after this turn."
+
+    def drain(self) -> list[str]:
+        messages, self._messages = self._messages, []
+        return messages
+
+
 class Microphone:
     def record(self, seconds: float = 6.0) -> str:
         import sounddevice as sd

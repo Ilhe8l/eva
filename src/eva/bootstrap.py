@@ -11,6 +11,7 @@ from eva.adapters.extensions import ExtensionStore
 from eva.adapters.host import HostCommandRunner
 from eva.adapters.memory import MemoryStore
 from eva.adapters.patches import PatchStore
+from eva.adapters.voice import SpeechOutbox
 from eva.application.session import EvaSession
 
 
@@ -40,6 +41,7 @@ class Application:
     extensions: ExtensionStore
     memory: MemoryStore
     patches: PatchStore
+    speech: SpeechOutbox
 
 
 @contextmanager
@@ -48,6 +50,7 @@ def bootstrap(settings: Settings, approval) -> Iterator[Application]:
     extensions = ExtensionStore(settings.data_dir)
     memory = MemoryStore(settings.data_dir)
     patches = PatchStore(settings.data_dir, Path.cwd())
+    speech = SpeechOutbox()
     runner = HostCommandRunner()
     checkpoint_path = settings.data_dir / "checkpoints.sqlite"
     with SqliteSaver.from_conn_string(str(checkpoint_path)) as checkpointer:
@@ -60,10 +63,12 @@ def bootstrap(settings: Settings, approval) -> Iterator[Application]:
             extensions=extensions,
             memory=memory,
             patches=patches,
+            speech=speech,
         )
         yield Application(
             session=EvaSession(agent=agent, approval=approval),
             extensions=extensions,
             memory=memory,
             patches=patches,
+            speech=speech,
         )
