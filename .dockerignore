@@ -1,0 +1,6 @@
+.git
+.venv
+.eva
+.pytest_cache
+__pycache__
+*.wav

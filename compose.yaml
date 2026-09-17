@@ -1,0 +1,17 @@
+services:
+  eva:
+    build:
+      context: .
+      args:
+        EVA_EXTRAS: ${EVA_EXTRAS:-test}
+    user: ${EVA_UID:-1000}:${EVA_GID:-1000}
+    working_dir: /workspace
+    network_mode: host
+    stdin_open: true
+    tty: true
+    environment:
+      EVA_MODEL: ${EVA_MODEL:?Set EVA_MODEL to a loaded LM Studio model ID}
+      EVA_LM_STUDIO_URL: ${EVA_LM_STUDIO_URL:-http://localhost:1234/v1}
+      EVA_DATA_DIR: /workspace/.eva
+    volumes:
+      - .:/workspace
