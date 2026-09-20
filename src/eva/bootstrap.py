@@ -11,6 +11,7 @@ from eva.adapters.extensions import ExtensionStore
 from eva.adapters.host import HostCommandRunner
 from eva.adapters.memory import MemoryStore
 from eva.adapters.patches import PatchStore
+from eva.adapters.summarizer import SessionSummarizer
 from eva.adapters.voice import SpeechOutbox
 from eva.application.session import EvaSession
 
@@ -42,6 +43,7 @@ class Application:
     memory: MemoryStore
     patches: PatchStore
     speech: SpeechOutbox
+    summarizer: SessionSummarizer
 
 
 @contextmanager
@@ -52,6 +54,11 @@ def bootstrap(settings: Settings, approval) -> Iterator[Application]:
     patches = PatchStore(settings.data_dir, Path.cwd())
     speech = SpeechOutbox()
     runner = HostCommandRunner()
+    summarizer = SessionSummarizer(
+        model_name=settings.model,
+        base_url=settings.base_url,
+        memory=memory,
+    )
     checkpoint_path = settings.data_dir / "checkpoints.sqlite"
     with SqliteSaver.from_conn_string(str(checkpoint_path)) as checkpointer:
         agent = DeepAgentAdapter(
@@ -71,4 +78,5 @@ def bootstrap(settings: Settings, approval) -> Iterator[Application]:
             memory=memory,
             patches=patches,
             speech=speech,
+            summarizer=summarizer,
         )

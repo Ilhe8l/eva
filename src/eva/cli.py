@@ -137,6 +137,7 @@ def main() -> None:
                 print(f"Eva error: {exc}")
                 continue
             print(f"\nEva> {reply}")
+            app.summarizer.record(message, reply)
             if app.session.denied_actions:
                 app.speech.drain()
             for spoken_text in app.speech.drain():
@@ -144,6 +145,11 @@ def main() -> None:
                     speaker.speak(spoken_text)
                 except (ImportError, OSError, ValueError) as exc:
                     print(f"Voice output unavailable: {exc}")
+
+    if not restart:
+        saved = app.summarizer.save()
+        if saved:
+            print(f"\n[Eva saved a session summary -> {saved}]")
 
     if restart:
         print("Restarting Eva with the updated source...")
