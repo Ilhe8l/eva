@@ -1,6 +1,6 @@
 import os
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
@@ -8,7 +8,6 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from eva.adapters.agent import DeepAgentAdapter
 from eva.adapters.extensions import ExtensionStore
-from eva.adapters.host import HostCommandRunner
 from eva.adapters.memory import MemoryStore
 from eva.adapters.patches import PatchStore
 from eva.adapters.summarizer import SessionSummarizer
@@ -20,8 +19,10 @@ from eva.application.session import EvaSession
 class Settings:
     model: str
     base_url: str = "http://localhost:1234/v1"
-    data_dir: Path = Path(".eva")
+    data_dir: Path = field(default_factory=lambda: Path(".eva"))
     thread_id: str = "main"
+    project_root: Path = field(default_factory=Path.cwd)
+    home_root: Path = field(default_factory=Path.home)
 
     @classmethod
     def from_env(cls, model: str | None = None) -> "Settings":
@@ -33,6 +34,8 @@ class Settings:
             base_url=os.getenv("EVA_LM_STUDIO_URL", "http://localhost:1234/v1"),
             data_dir=Path(os.getenv("EVA_DATA_DIR", ".eva")),
             thread_id=os.getenv("EVA_THREAD_ID", "main"),
+            project_root=Path(os.getenv("EVA_PROJECT_ROOT", str(Path.cwd()))),
+            home_root=Path(os.getenv("EVA_HOME_ROOT", str(Path.home()))),
         )
 
 
@@ -51,9 +54,8 @@ def bootstrap(settings: Settings, approval) -> Iterator[Application]:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     extensions = ExtensionStore(settings.data_dir)
     memory = MemoryStore(settings.data_dir)
-    patches = PatchStore(settings.data_dir, Path.cwd())
+    patches = PatchStore(settings.data_dir, settings.project_root)
     speech = SpeechOutbox()
-    runner = HostCommandRunner()
     summarizer = SessionSummarizer(
         model_name=settings.model,
         base_url=settings.base_url,
@@ -66,11 +68,12 @@ def bootstrap(settings: Settings, approval) -> Iterator[Application]:
             base_url=settings.base_url,
             checkpointer=checkpointer,
             thread_id=settings.thread_id,
-            runner=runner,
             extensions=extensions,
             memory=memory,
             patches=patches,
             speech=speech,
+            project_root=settings.project_root,
+            home_root=settings.home_root,
         )
         yield Application(
             session=EvaSession(agent=agent, approval=approval),

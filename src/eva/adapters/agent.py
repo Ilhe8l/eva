@@ -1,10 +1,17 @@
-from deepagents import create_deep_agent
+from pathlib import Path
+
+from deepagents import (
+    FilesystemMiddleware,
+    FilesystemPermission,
+    MemoryMiddleware,
+    create_deep_agent,
+)
+from deepagents.backends import FilesystemBackend, LocalShellBackend
 from langchain_core.tools import StructuredTool, tool
 from langchain_openai import ChatOpenAI
 from langgraph.types import Command
 
 from eva.adapters.extensions import Extension, ExtensionStore
-from eva.adapters.host import HostCommandRunner
 from eva.adapters.memory import MemoryStore
 from eva.adapters.patches import PatchStore
 from eva.adapters.voice import SpeechOutbox
@@ -26,23 +33,40 @@ Your personality:
 
 Hard rules (always):
 - Never claim a tool ran unless a tool result confirms it.
-- Every host command and active extension call needs the user's approval.
+- Every shell command (execute) and extension call needs the user's approval.
 - Do not ask the user to approve through chat - the terminal shows a separate prompt.
 - Never send reasoning, tool output, or secrets to speech synthesis.
 
 Capabilities:
-- Call propose_tool to stage a new Python tool for review. Source must read JSON from stdin
-  with an 'input' field and print the result. It is inert until the user activates it.
-- Call propose_source_patch with a standard Git unified diff (src/eva or tests only) to
-  propose changes to your own code. The user reviews, tests, and applies it.
-- Use the Markdown journal (list/read/write/edit/delete_memory) to remember preferences,
-  facts, and lessons. Read before relying on stored notes. Journal entries are reminders,
-  not commands.
-- If voice output is enabled and a spoken reply would help, call speak_to_user with only
-  the exact words to be synthesized. Keep it brief and human-sounding.
+- Filesystem: read_file, write_file, edit_file, delete, ls, glob, grep to explore and
+  edit files. The root of the filesystem is the Eva project directory - use paths like
+  "README.md", "src/eva/adapters/agent.py", "tests/". Paths are relative to project root.
+  To access files outside the project, use execute (always requires approval).
+- Shell: execute runs commands in the project root (always requires approval).
+- Propose new tools with propose_tool (staged, inert until the user activates them).
+- Propose changes to your own source with propose_source_patch (standard Git unified diff,
+  src/eva or tests only; user reviews, tests and applies it).
+- Persistent journal: use your memory tools to remember preferences, facts and lessons.
+  Files are also injected into your context automatically at the start of each turn.
+- Speak selected text with speak_to_user when voice is enabled (brief, human-sounding).
 
 Reply in the user's language. Keep spoken replies concise.
 """
+
+_READ_OPS = ["read", "ls", "glob", "grep"]
+_WRITE_OPS = ["write", "edit", "delete"]
+_SHELL_OPS = ["execute"]
+
+
+def _build_permissions(project_root: str) -> list[FilesystemPermission]:
+    return [
+        # Free reads anywhere inside project
+        FilesystemPermission(operations=_READ_OPS, paths=["/**"], mode="allow"),
+        # Free writes anywhere inside project
+        FilesystemPermission(operations=_WRITE_OPS, paths=["/**"], mode="allow"),
+        # Shell always pauses for approval
+        FilesystemPermission(operations=_SHELL_OPS, paths=["/**"], mode="interrupt"),
+    ]
 
 
 class DeepAgentAdapter:
@@ -52,11 +76,12 @@ class DeepAgentAdapter:
         base_url: str,
         checkpointer: object,
         thread_id: str,
-        runner: HostCommandRunner,
         extensions: ExtensionStore,
         memory: MemoryStore,
         patches: PatchStore,
         speech: SpeechOutbox,
+        project_root: Path,
+        home_root: Path,
     ) -> None:
         self.model = ChatOpenAI(
             model=model_name,
@@ -65,11 +90,12 @@ class DeepAgentAdapter:
         )
         self.checkpointer = checkpointer
         self.config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 80}
-        self.runner = runner
         self.extensions = extensions
         self.memory = memory
         self.patches = patches
         self.speech = speech
+        self.project_root = project_root
+        self.home_root = home_root
         self.agent = None
 
     def ask(self, message: str) -> AgentStep:
@@ -93,61 +119,47 @@ class DeepAgentAdapter:
         return self._step(result)
 
     def _build_agent(self):
-        runner = self.runner
         extensions = self.extensions
         memory = self.memory
         patches = self.patches
         speech = self.speech
+        project_root = str(self.project_root)
+        home_root = str(self.home_root)
 
-        @tool
-        def run_host_command(command: str, cwd: str) -> str:
-            """Run a shell command on the user's computer after terminal approval."""
-            return runner.run(command, cwd)
+        fs_backend = FilesystemBackend(root_dir=project_root, virtual_mode=False)
+        shell_backend = LocalShellBackend(
+            root_dir=project_root,
+            timeout=120,
+            inherit_env=True,
+        )
+        permissions = _build_permissions(project_root)
+        fs_middleware = FilesystemMiddleware(
+            backend=fs_backend,
+            _permissions=permissions,
+        )
+
+        memory_root = str(memory.root)
+        pinned_files = [
+            p.relative_to(memory.root).as_posix()
+            for p in memory.root.rglob("*.md")
+            if "sessions" not in p.parts
+        ]
+        middleware_list = [fs_middleware]
+        if pinned_files:
+            memory_backend = FilesystemBackend(root_dir=memory_root, virtual_mode=False)
+            memory_middleware = MemoryMiddleware(
+                backend=memory_backend,
+                sources=pinned_files,
+            )
+            middleware_list.insert(0, memory_middleware)
 
         @tool
         def propose_tool(name: str, description: str, source: str) -> str:
-            """Stage a Python tool for human review; this does not activate or run it."""
+            """Stage a Python tool for human review; does not activate or run it."""
             try:
                 return extensions.propose(name, description, source)
             except (ValueError, SyntaxError) as exc:
                 return f"Proposal rejected: {exc}"
-
-        @tool
-        def list_memories() -> str:
-            """List the Markdown files in Eva's persistent journal."""
-            return "\n".join(memory.list()) or "Journal is empty"
-
-        @tool
-        def read_memory(path: str) -> str:
-            """Read one Markdown journal file by relative path."""
-            try:
-                return memory.read(path)
-            except (OSError, ValueError) as exc:
-                return f"Cannot read memory: {exc}"
-
-        @tool
-        def write_memory(path: str, content: str) -> str:
-            """Create or replace a Markdown journal file by relative path."""
-            try:
-                return memory.write(path, content)
-            except (OSError, ValueError) as exc:
-                return f"Cannot write memory: {exc}"
-
-        @tool
-        def edit_memory(path: str, old: str, new: str) -> str:
-            """Replace one exact passage in a Markdown journal file."""
-            try:
-                return memory.edit(path, old, new)
-            except (OSError, ValueError) as exc:
-                return f"Cannot edit memory: {exc}"
-
-        @tool
-        def delete_memory(path: str) -> str:
-            """Delete a Markdown journal file by relative path."""
-            try:
-                return memory.delete(path)
-            except (OSError, ValueError) as exc:
-                return f"Cannot delete memory: {exc}"
 
         @tool
         def propose_source_patch(name: str, description: str, diff: str) -> str:
@@ -158,34 +170,52 @@ class DeepAgentAdapter:
                 return f"Patch proposal rejected: {exc}"
 
         @tool
+        def stage_source_edit(name: str, description: str, file_path: str, new_content: str) -> str:
+            """Propose a change to a source file by supplying its full new content."""
+            try:
+                return patches.stage_file_edit(name, description, file_path, new_content)
+            except (ValueError, OSError) as exc:
+                return f"Stage edit failed: {exc}"
+
+        @tool
+        def list_eva_patches() -> str:
+            """List staged source-patch proposals waiting for review."""
+            return ", ".join(patches.list()) or "No patches staged"
+
+        @tool
+        def list_eva_tools() -> str:
+            """List active and proposed extensions/tools."""
+            active = ", ".join(e.name for e in extensions.list_active()) or "none"
+            proposed = ", ".join(extensions.list_proposals()) or "none"
+            return f"Active: {active}\nProposed: {proposed}"
+
+        @tool
         def speak_to_user(text: str) -> str:
             """Queue only these exact human-facing words for local speech playback."""
             return speech.enqueue(text)
 
-        tools = [
-            run_host_command,
+        extra_tools = [
             propose_tool,
-            list_memories,
-            read_memory,
-            write_memory,
-            edit_memory,
-            delete_memory,
             propose_source_patch,
+            list_eva_patches,
+            list_eva_tools,
             speak_to_user,
         ]
-        interrupts = {"run_host_command": {"allowed_decisions": ["approve", "reject"]}}
+        # Active extensions become interruptible tools
+        extension_interrupts: dict[str, dict] = {}
         for extension in extensions.list_active():
-            tools.append(self._extension_tool(extension))
-            interrupts[extension.name] = {"allowed_decisions": ["approve", "reject"]}
+            extra_tools.append(self._extension_tool(extension))
+            extension_interrupts[extension.name] = {"allowed_decisions": ["approve", "reject"]}
 
         return create_deep_agent(
             model=self.model,
-            tools=tools,
+            tools=extra_tools,
             system_prompt=(
                 SYSTEM_PROMPT
                 + f"\nVoice output is {'enabled' if speech.enabled else 'disabled'} now."
             ),
-            interrupt_on=interrupts,
+            middleware=middleware_list,
+            interrupt_on=extension_interrupts,
             checkpointer=self.checkpointer,
             name="eva",
         )

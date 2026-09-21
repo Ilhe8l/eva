@@ -38,6 +38,45 @@ class PatchStore:
     def list(self) -> list[str]:
         return sorted(path.stem for path in self.root.glob("*.json"))
 
+    def stage_file_edit(self, name: str, description: str, file_path: str, new_content: str) -> str:
+        if not _NAME.fullmatch(name):
+            raise ValueError("Invalid patch name")
+        if not 10 <= len(description) <= 500:
+            raise ValueError("Description must be 10-500 characters")
+        if not file_path.startswith(_ALLOWED):
+            raise ValueError(f"Only files under {_ALLOWED} may be patched")
+
+        target = self.project_root / file_path
+        if not target.exists():
+            raise ValueError(f"File not found: {file_path}")
+        if not target.is_relative_to(self.project_root):
+            raise ValueError("Path escapes project root")
+
+        # Save original, write candidate, diff, restore
+        original = target.read_text(encoding="utf-8")
+        try:
+            target.write_text(new_content, encoding="utf-8")
+            diff_result = subprocess.run(
+                ["git", "diff", "--", file_path],
+                cwd=self.project_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            diff = diff_result.stdout
+        finally:
+            target.write_text(original, encoding="utf-8")
+
+        if not diff.strip():
+            return "No changes detected between current file and proposed content."
+
+        try:
+            self._validate(name, description, diff)
+        except ValueError as exc:
+            return f"Generated diff is invalid: {exc}"
+
+        return self.propose(name, description, diff)
+
     def read(self, name: str) -> PatchProposal:
         proposal = PatchProposal(**json.loads(self._path(name).read_text(encoding="utf-8")))
         self._validate(proposal.name, proposal.description, proposal.diff)

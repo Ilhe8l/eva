@@ -8,13 +8,26 @@ from eva.adapters.voice import KokoroSpeaker, Microphone, WhisperTranscriber
 from eva.bootstrap import Settings, bootstrap
 from eva.domain.models import ActionRequest
 
+# Tools that always require approval (shell + writes outside project)
+_ALWAYS_INTERRUPT = {"execute", "write_file", "edit_file", "delete"}
+
 
 class TerminalApproval:
     def approve(self, action: ActionRequest) -> bool:
-        print(f"\nEva requests: {action.name}")
-        print(json.dumps(action.arguments, ensure_ascii=False, indent=2))
+        tool = action.name
+        args = action.arguments
+        print(f"\nEva requests: {tool}")
+        if "command" in args:
+            print(f"  command : {args['command']}")
+            print(f"  cwd     : {args.get('cwd', args.get('path', '?'))}")
+        elif "file_path" in args:
+            print(f"  path    : {args['file_path']}")
+        elif "path" in args:
+            print(f"  path    : {args['path']}")
+        else:
+            print(json.dumps(args, ensure_ascii=False, indent=2))
         try:
-            answer = input("Approve this execution? [y/N] ").strip().lower()
+            answer = input("Approve? [y/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             return False
         return answer in {"y", "yes", "s", "sim"}
