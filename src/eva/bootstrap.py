@@ -24,11 +24,13 @@ class Settings:
     project_root: Path = field(default_factory=Path.cwd)
     home_root: Path = field(default_factory=Path.home)
 
+    gemini_api_key: str | None = None
+
     @classmethod
     def from_env(cls, model: str | None = None) -> "Settings":
         selected = model or os.getenv("EVA_MODEL")
         if not selected:
-            raise ValueError("Set EVA_MODEL or pass --model with a loaded LM Studio model ID")
+            raise ValueError("Set EVA_MODEL or pass --model with a loaded LM Studio model ID or gemini-2.5-flash")
         return cls(
             model=selected,
             base_url=os.getenv("EVA_LM_STUDIO_URL", "http://localhost:1234/v1"),
@@ -36,6 +38,7 @@ class Settings:
             thread_id=os.getenv("EVA_THREAD_ID", "main"),
             project_root=Path(os.getenv("EVA_PROJECT_ROOT", str(Path.cwd()))),
             home_root=Path(os.getenv("EVA_HOME_ROOT", str(Path.home()))),
+            gemini_api_key=os.getenv("GEMINI_API_KEY"),
         )
 
 
@@ -74,6 +77,7 @@ def bootstrap(settings: Settings, approval) -> Iterator[Application]:
             speech=speech,
             project_root=settings.project_root,
             home_root=settings.home_root,
+            gemini_api_key=settings.gemini_api_key,
         )
         yield Application(
             session=EvaSession(agent=agent, approval=approval),

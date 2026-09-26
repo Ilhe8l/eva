@@ -49,8 +49,15 @@ Capabilities:
 - Persistent journal: use your memory tools to remember preferences, facts and lessons.
   Files are also injected into your context automatically at the start of each turn.
 - Speak selected text with speak_to_user when voice is enabled (brief, human-sounding).
+  CRITICAL: If voice is enabled, you MUST call speak_to_user with your response! Do not just output text.
 
-Reply in the user's language. Keep spoken replies concise.
+The user will speak to you in Portuguese.
+CRITICAL RULES FOR LANGUAGE:
+1. NEVER reply in Portuguese. Not even a greeting. Not even a single word.
+2. NEVER translate or repeat the user's Portuguese text back to them.
+3. ALWAYS reply 100% in American English.
+This is strictly required because your text-to-speech engine crashes on foreign words.
+Keep spoken replies concise and natural.
 """
 
 _READ_OPS = ["read", "ls", "glob", "grep"]
@@ -82,12 +89,22 @@ class DeepAgentAdapter:
         speech: SpeechOutbox,
         project_root: Path,
         home_root: Path,
+        gemini_api_key: str | None = None,
     ) -> None:
-        self.model = ChatOpenAI(
-            model=model_name,
-            base_url=base_url,
-            api_key="lm-studio",
-        )
+        if gemini_api_key:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            self.model = ChatGoogleGenerativeAI(
+                model=model_name if "gemini" in model_name else "gemini-2.5-flash",
+                google_api_key=gemini_api_key,
+                temperature=0.3,
+            )
+        else:
+            self.model = ChatOpenAI(
+                model=model_name,
+                base_url=base_url,
+                api_key="lm-studio",
+                temperature=0.3,
+            )
         self.checkpointer = checkpointer
         self.config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 80}
         self.extensions = extensions
@@ -170,14 +187,6 @@ class DeepAgentAdapter:
                 return f"Patch proposal rejected: {exc}"
 
         @tool
-        def stage_source_edit(name: str, description: str, file_path: str, new_content: str) -> str:
-            """Propose a change to a source file by supplying its full new content."""
-            try:
-                return patches.stage_file_edit(name, description, file_path, new_content)
-            except (ValueError, OSError) as exc:
-                return f"Stage edit failed: {exc}"
-
-        @tool
         def list_eva_patches() -> str:
             """List staged source-patch proposals waiting for review."""
             return ", ".join(patches.list()) or "No patches staged"
@@ -212,7 +221,11 @@ class DeepAgentAdapter:
             tools=extra_tools,
             system_prompt=(
                 SYSTEM_PROMPT
-                + f"\nVoice output is {'enabled' if speech.enabled else 'disabled'} now."
+                + (
+                    "\n\n[CRITICAL] Voice output is currently ON. You MUST use the `speak_to_user` tool for your reply."
+                    if speech.enabled
+                    else "\n\nVoice output is currently OFF. Reply with text only."
+                )
             ),
             middleware=middleware_list,
             interrupt_on=extension_interrupts,

@@ -9,8 +9,10 @@ description = "Local voice assistant with reviewed host actions and extensions"
 requires-python = ">=3.12"
 dependencies = [
     "deepagents>=0.7.9,<1",
+    "langchain-google-genai>=4.4.0",
     "langchain-openai>=1,<2",
     "langgraph-checkpoint-sqlite>=3,<4",
+    "pillow>=12.3.0",
 ]
 
 [project.optional-dependencies]

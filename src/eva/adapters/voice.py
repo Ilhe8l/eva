@@ -54,15 +54,16 @@ class WhisperTranscriber:
         from faster_whisper import WhisperModel
 
         if self._model is None:
+            # Full GPU available now!
             self._model = WhisperModel(
-                self.model_name, device="auto", compute_type="auto"
+                self.model_name, device="cuda", compute_type="float16"
             )
         segments, _ = self._model.transcribe(audio_path, beam_size=5, vad_filter=True)
         return " ".join(segment.text.strip() for segment in segments).strip()
 
 
 class KokoroSpeaker:
-    def __init__(self, voice: str = "pf_dora", language: str = "p") -> None:
+    def __init__(self, voice: str = "af_heart", language: str = "a") -> None:
         self.voice = voice
         self.language = language
         self._pipeline = None
@@ -74,7 +75,10 @@ class KokoroSpeaker:
         if not text.strip():
             return
         if self._pipeline is None:
-            self._pipeline = KPipeline(lang_code=self.language)
+            # Uses CUDA now that VRAM is free
+            self._pipeline = KPipeline(lang_code=self.language, repo_id="hexgrad/Kokoro-82M", device="cuda")
+
+        # Texto puro, sem filtros artificiais
         for _, _, audio in self._pipeline(text, voice=self.voice):
             sd.play(audio, samplerate=24000)
             sd.wait()
