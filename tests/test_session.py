@@ -1,44 +1,43 @@
 from eva.application.session import EvaSession
 from eva.domain.models import ActionRequest, AgentStep
 
+COMMAND = ActionRequest("execute", {"command": "rm build.log"})
+
 
 class FakeAgent:
-    def __init__(self, reply="The action was handled."):
+    def __init__(self):
         self.decisions = None
-        self.reply = reply
 
     def ask(self, message):
-        assert message == "Please inspect my files"
-        return AgentStep(
-            reply=None,
-            pending_actions=(
-                ActionRequest("run_host_command", {"command": "pwd", "cwd": "/tmp"}),
-            ),
-        )
+        return AgentStep(reply=None, pending_actions=(COMMAND,))
 
     def resume(self, decisions):
         self.decisions = decisions
-        return AgentStep(reply=self.reply)
+        return AgentStep(reply="Done.")
 
 
 class FakeApproval:
     def __init__(self, approved):
         self.approved = approved
+        self.seen = []
 
     def approve(self, action):
-        assert action.arguments["command"] == "pwd"
+        self.seen.append(action)
         return self.approved
 
 
-def test_session_approves_pending_command():
-    agent = FakeAgent()
-    answer = EvaSession(agent, FakeApproval(True)).send("Please inspect my files")
-    assert answer == "The action was handled."
+def test_approved_action_resumes_the_turn():
+    agent, approval = FakeAgent(), FakeApproval(True)
+    session = EvaSession(agent, approval)
+    assert session.send("clean up") == "Done."
+    assert approval.seen == [COMMAND]
     assert agent.decisions == [{"type": "approve"}]
+    assert session.denied_actions == []
 
 
-def test_session_rejects_pending_command():
-    agent = FakeAgent(reply="I ran pwd and got /tmp")
-    answer = EvaSession(agent, FakeApproval(False)).send("Please inspect my files")
+def test_rejected_action_is_reported_to_agent_and_user():
+    agent = FakeAgent()
+    session = EvaSession(agent, FakeApproval(False))
+    session.send("clean up")
     assert agent.decisions[0]["type"] == "reject"
-    assert answer == "Action denied and not executed: run_host_command."
+    assert session.denied_actions == ["execute"]
