@@ -193,11 +193,13 @@ class Terminal:
         app: Application,
         console: Console,
         transcriber: WhisperTranscriber,
+        player: SpeechPlayer,
         heartbeat: timedelta | None,
     ) -> None:
         self.app = app
         self.console = console
         self.transcriber = transcriber
+        self.player = player
         self.microphone = Microphone()
         self.heartbeat = heartbeat
         self._turns: asyncio.Queue[Turn] = asyncio.Queue()
@@ -290,6 +292,8 @@ class Terminal:
             return await in_daemon_thread(self._listen)
         if name == ":speak" and argument in {"on", "off"}:
             self.app.speech.enabled = argument == "on"
+            if self.app.speech.enabled:
+                self.player.warm_up()
             print(f"Speech {argument}.")
         else:
             print(HELP)

@@ -22,6 +22,25 @@ revisit the reasoning instead of rediscovering it.
   in-process loop covers the current needs with no extra service. They remain
   an option for long parallel jobs.
 
+## Kokoro stays; speech streams by sentence
+
+Measured on a consumer GPU with 6 GB: Kokoro-82M synthesizes 7.3 s
+of audio in 0.19 s once warm, with the first sentence ready in about 0.1 s.
+Among open-weights models it ranks close to much larger ones
+([Artificial Analysis](https://artificialanalysis.ai/text-to-speech/leaderboard/provider-voice/open-weights)).
+The higher-ranked models (Voxtral 4B, Fish S2 Pro) would not fit next to
+Whisper large-v3-turbo on 6 GB, or would add latency. Chatterbox mainly adds
+voice cloning. To cut latency further:
+
+- speech is streamed to `paplay`/`aplay` sentence by sentence while the rest
+  is synthesized;
+- Kokoro warms up in the background when speech is turned on, and Whisper
+  warms up at startup. The cold start (about 6 s) is paid before the first
+  reply, not during it.
+
+`Speaker` is a small protocol (`warm_up`, `speak`), so another engine can
+replace Kokoro without touching the rest of Eva.
+
 ## Voice input is push-to-talk and framed for Eva
 
 `:record` listens until Enter. The transcript is shown to the user and sent as

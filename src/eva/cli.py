@@ -2,8 +2,10 @@
 
 import argparse
 import asyncio
+import importlib.util
 import os
 import sys
+import threading
 from datetime import timedelta
 
 from eva.adapters.voice import KokoroSpeaker, SpeechPlayer, WhisperTranscriber
@@ -32,9 +34,14 @@ def main() -> None:
         on_error=lambda exc: print(f"Voice output unavailable: {exc}"),
     )
     heartbeat = timedelta(minutes=settings.heartbeat_minutes) if settings.heartbeat_minutes > 0 else None
+    transcriber = WhisperTranscriber(model_name=args.whisper_model)
+    if importlib.util.find_spec("faster_whisper"):
+        threading.Thread(target=transcriber.warm_up, daemon=True).start()
+    if args.speak:
+        player.warm_up()
     with bootstrap(settings, ConsoleApproval(console), ProgressView(player)) as app:
         app.speech.enabled = args.speak
-        terminal = Terminal(app, console, WhisperTranscriber(model_name=args.whisper_model), heartbeat)
+        terminal = Terminal(app, console, transcriber, player, heartbeat)
         asyncio.run(terminal.run(resumed=args.resumed))
         player.wait()
         speaking = app.speech.enabled
