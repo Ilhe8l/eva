@@ -5,13 +5,14 @@ import difflib
 import os
 import sys
 
-from eva.adapters.voice import KokoroSpeaker, Microphone, WhisperTranscriber
+from eva.adapters.voice import KokoroSpeaker, Microphone, SpeechPlayer, WhisperTranscriber
 from eva.bootstrap import Application, bootstrap
 from eva.config import Settings
-from eva.domain.models import ActionRequest
+from eva.domain.models import ActionRequest, AgentEvent, Speech, ToolUse
 
 YES = {"y", "yes", "s", "sim"}
 PREVIEW_LINES = 40
+SUMMARY_WIDTH = 100
 HELP = "Commands: :record [seconds], :speak on|off, :tools, :activate NAME, :patches, :apply NAME, :quit"
 
 
@@ -56,6 +57,28 @@ def describe(action: ActionRequest) -> str:
     return _preview("\n".join(f"  {key}: {value}" for key, value in args.items()))
 
 
+class ProgressView:
+    """Shows what Eva is doing and plays what she says, as it happens."""
+
+    def __init__(self, player: SpeechPlayer) -> None:
+        self.player = player
+
+    def __call__(self, event: AgentEvent) -> None:
+        match event:
+            case Speech(text):
+                print(f"\nEva (aloud)> {text}")
+                self.player.play(text)
+            case ToolUse(name, arguments):
+                print(f"  · {summarize(name, arguments)}")
+
+
+def summarize(name: str, arguments: dict) -> str:
+    keys = ("command", "file_path", "pattern", "path", "description")
+    detail = next((str(arguments[key]) for key in keys if arguments.get(key)), "")
+    line = f"{name} {detail}".strip().replace("\n", " ")
+    return line if len(line) <= SUMMARY_WIDTH else f"{line[: SUMMARY_WIDTH - 1]}…"
+
+
 def activate_extension(app: Application, name: str) -> None:
     try:
         proposal = app.extensions.read_proposal(name)
@@ -91,9 +114,8 @@ def apply_patch(app: Application, name: str) -> bool:
 
 
 class Terminal:
-    def __init__(self, app: Application, speaker: KokoroSpeaker, transcriber: WhisperTranscriber) -> None:
+    def __init__(self, app: Application, transcriber: WhisperTranscriber) -> None:
         self.app = app
-        self.speaker = speaker
         self.transcriber = transcriber
         self.microphone = Microphone()
         self.restart = False
@@ -157,19 +179,12 @@ class Terminal:
         try:
             reply = self.app.session.send(message)
         except Exception as exc:  # noqa: BLE001 - keep the terminal alive on model errors
-            self.app.speech.drain()
             print(f"Eva error: {exc}")
             return
         print(f"\nEva> {reply}")
         if self.app.session.denied_actions:
             print(f"[Declined: {', '.join(self.app.session.denied_actions)}]")
         self.app.summarizer.record(message, reply)
-        for sentence in self.app.speech.drain():
-            try:
-                self.speaker.speak(sentence)
-            except (ImportError, OSError, ValueError) as exc:
-                print(f"Voice output unavailable: {exc}")
-                break
 
 
 def main() -> None:
@@ -185,12 +200,15 @@ def main() -> None:
     except ValueError as exc:
         parser.error(str(exc))
 
-    speaker = KokoroSpeaker(voice=args.voice, language=args.voice_language)
-    transcriber = WhisperTranscriber(model_name=args.whisper_model)
-    with bootstrap(settings, TerminalApproval()) as app:
+    player = SpeechPlayer(
+        KokoroSpeaker(voice=args.voice, language=args.voice_language),
+        on_error=lambda exc: print(f"Voice output unavailable: {exc}"),
+    )
+    with bootstrap(settings, TerminalApproval(), ProgressView(player)) as app:
         app.speech.enabled = args.speak
-        terminal = Terminal(app, speaker, transcriber)
+        terminal = Terminal(app, WhisperTranscriber(model_name=args.whisper_model))
         terminal.run()
+        player.wait()
         if not terminal.restart and (saved := app.summarizer.save()):
             print(f"\n[Session summary saved to {saved}]")
 

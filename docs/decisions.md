@@ -3,6 +3,18 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## Progress is streamed, speech plays while Eva works
+
+The adapter runs `agent.stream(stream_mode=["updates", "custom"],
+subgraphs=True, version="v2")`
+([streaming](https://docs.langchain.com/oss/python/deepagents/streaming)).
+`speak_to_user` emits a custom event through `get_stream_writer()`, and the
+terminal plays it immediately on a background thread, so Eva can say "checking
+the logs now" before a slow step instead of after the whole turn. Tool calls
+are shown as one-line progress. Interrupts and the final reply are read from
+`get_state()` after the stream ends. Subagent events arrive through
+`subgraphs=True`.
+
 ## Approval policy lives in `interrupt_on`, not `permissions`
 
 Deep Agents' `FilesystemPermission` rules only cover file tools, never

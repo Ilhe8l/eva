@@ -1,17 +1,18 @@
 """Eva-specific tools added to the Deep Agents built-ins."""
 
 from langchain_core.tools import BaseTool, StructuredTool, tool
+from langgraph.config import get_stream_writer
 
 from eva.adapters.extensions import Extension, ExtensionStore
 from eva.adapters.patches import PatchStore
-from eva.adapters.voice import SpeechOutbox
+from eva.adapters.voice import SpeechChannel
 
 
-def build_tools(speech: SpeechOutbox, extensions: ExtensionStore, patches: PatchStore) -> list[BaseTool]:
+def build_tools(speech: SpeechChannel, extensions: ExtensionStore, patches: PatchStore) -> list[BaseTool]:
     @tool
     def speak_to_user(text: str) -> str:
-        """Say one or two short sentences aloud to the user."""
-        return speech.enqueue(text)
+        """Say one or two short sentences aloud to the user, right now, even mid-task."""
+        return speech.say(text, get_stream_writer())
 
     @tool
     def propose_tool(name: str, description: str, source: str) -> str:

@@ -1,27 +1,31 @@
 """Deep Agents adapter.
 
 Docs: https://docs.langchain.com/oss/python/deepagents/overview,
-https://docs.langchain.com/oss/python/deepagents/backends and
-https://docs.langchain.com/oss/python/deepagents/human-in-the-loop
+https://docs.langchain.com/oss/python/deepagents/backends,
+https://docs.langchain.com/oss/python/deepagents/human-in-the-loop and
+https://docs.langchain.com/oss/python/deepagents/streaming
 """
 
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from langchain.agents.middleware import InterruptOnConfig
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer, Command
 
 from eva.adapters.policy import MEMORY_ROUTE
-from eva.domain.models import ActionRequest, AgentStep
+from eva.adapters.voice import SPEECH_EVENT
+from eva.domain.models import ActionRequest, AgentEvent, AgentStep, Speech, ToolUse
 from eva.prompts import SYSTEM_PROMPT
 
 MEMORY_INDEX = f"{MEMORY_ROUTE}AGENTS.md"
 SHELL_TIMEOUT_SECONDS = 120
+SILENT_TOOLS = {"speak_to_user"}
 _SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
 
 
@@ -59,8 +63,10 @@ class DeepAgentAdapter:
         backend: CompositeBackend,
         checkpointer: Checkpointer,
         thread_id: str,
+        on_event: Callable[[AgentEvent], None] = lambda event: None,
     ) -> None:
         self.model = model
+        self.on_event = on_event
         self.backend = backend
         self.checkpointer = checkpointer
         self.config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 150}
@@ -96,20 +102,44 @@ class DeepAgentAdapter:
     def _run(self, payload) -> AgentStep:
         if self._agent is None:
             raise RuntimeError("Call configure() before running the agent")
-        result = self._agent.invoke(payload, config=self.config, version="v2")
-        return self._step(result)
+        for chunk in self._agent.stream(
+            payload,
+            config=self.config,
+            stream_mode=["updates", "custom"],
+            subgraphs=True,
+            version="v2",
+        ):
+            for event in _events(chunk):
+                self.on_event(event)
+        return self._step(self._agent.get_state(self.config))
 
-    def _step(self, result) -> AgentStep:
+    def _step(self, state) -> AgentStep:
         self._pending = []
         actions: list[ActionRequest] = []
-        for interrupt in result.interrupts:
+        for interrupt in state.interrupts:
             requests = interrupt.value["action_requests"]
             self._pending.append((interrupt.id, len(requests)))
             actions.extend(ActionRequest(name=item["name"], arguments=item["args"]) for item in requests)
         if actions:
             return AgentStep(reply=None, pending_actions=tuple(actions))
-        return AgentStep(reply=_text(result.value["messages"][-1].content))
+        return AgentStep(reply=_text(state.values["messages"][-1].content))
 
+
+def _events(chunk: dict) -> list[AgentEvent]:
+    """Translate one v2 stream chunk into progress events."""
+    data = chunk["data"]
+    if chunk["type"] == "custom":
+        is_speech = isinstance(data, dict) and data.get("type") == SPEECH_EVENT
+        return [Speech(data["text"])] if is_speech else []
+    events: list[AgentEvent] = []
+    for update in data.values():
+        messages = update.get("messages", []) if isinstance(update, dict) else []
+        for message in messages if isinstance(messages, list) else []:
+            if isinstance(message, AIMessage):
+                events.extend(
+                    ToolUse(call["name"], call["args"]) for call in message.tool_calls if call["name"] not in SILENT_TOOLS
+                )
+    return events
 
 def _text(content: str | list) -> str:
     if isinstance(content, str):

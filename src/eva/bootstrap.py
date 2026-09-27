@@ -3,7 +3,7 @@
 SQLite checkpointer: https://docs.langchain.com/oss/python/langgraph/checkpointers
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -16,10 +16,11 @@ from eva.adapters.patches import PatchStore
 from eva.adapters.policy import approval_rules
 from eva.adapters.summarizer import SessionSummarizer
 from eva.adapters.tools import build_tools
-from eva.adapters.voice import SpeechOutbox
+from eva.adapters.voice import SpeechChannel
 from eva.application.ports import ApprovalPort
 from eva.application.session import EvaSession
 from eva.config import Settings
+from eva.domain.models import AgentEvent
 
 
 @dataclass
@@ -28,7 +29,7 @@ class Application:
     agent: DeepAgentAdapter
     extensions: ExtensionStore
     patches: PatchStore
-    speech: SpeechOutbox
+    speech: SpeechChannel
     summarizer: SessionSummarizer
 
     def reload_tools(self) -> None:
@@ -39,7 +40,11 @@ class Application:
 
 
 @contextmanager
-def bootstrap(settings: Settings, approval: ApprovalPort) -> Iterator[Application]:
+def bootstrap(
+    settings: Settings,
+    approval: ApprovalPort,
+    on_event: Callable[[AgentEvent], None],
+) -> Iterator[Application]:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     memory_dir = settings.data_dir / "memory"
     model = build_chat_model(settings.model, settings.lm_studio_url)
@@ -49,13 +54,14 @@ def bootstrap(settings: Settings, approval: ApprovalPort) -> Iterator[Applicatio
             backend=build_backend(settings.project_root, memory_dir),
             checkpointer=checkpointer,
             thread_id=settings.thread_id,
+            on_event=on_event,
         )
         app = Application(
             session=EvaSession(agent=agent, approval=approval),
             agent=agent,
             extensions=ExtensionStore(settings.data_dir),
             patches=PatchStore(settings.data_dir, settings.project_root),
-            speech=SpeechOutbox(),
+            speech=SpeechChannel(),
             summarizer=SessionSummarizer(model, memory_dir / "sessions"),
         )
         app.reload_tools()

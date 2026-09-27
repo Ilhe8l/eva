@@ -6,7 +6,12 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from eva.adapters.agent import DeepAgentAdapter, build_backend
+from eva.adapters.extensions import ExtensionStore
+from eva.adapters.patches import PatchStore
 from eva.adapters.policy import approval_rules
+from eva.adapters.tools import build_tools
+from eva.adapters.voice import SpeechChannel
+from eva.domain.models import Speech, ToolUse
 
 
 class ScriptedModel(GenericFakeChatModel):
@@ -24,10 +29,14 @@ def make_agent(tmp_path):
     project.mkdir()
     (project / "notes.txt").write_text("keep me\n")
 
-    def make(*messages):
+    def make(*messages, events=None, speech=None):
         model = ScriptedModel(messages=iter([*messages, AIMessage(content="All done.")]))
-        agent = DeepAgentAdapter(model, build_backend(project, tmp_path / "memory"), InMemorySaver(), "test")
-        agent.configure([], approval_rules())
+        backend = build_backend(project, tmp_path / "memory")
+        on_event = events.append if events is not None else lambda event: None
+        agent = DeepAgentAdapter(model, backend, InMemorySaver(), "test", on_event=on_event)
+        data = tmp_path / "data"
+        tools = build_tools(speech or SpeechChannel(), ExtensionStore(data), PatchStore(data, project))
+        agent.configure(tools, approval_rules())
         return agent
 
     return make, project, tmp_path / "memory"
@@ -60,3 +69,13 @@ def test_project_write_waits_but_journal_write_does_not(make_agent):
     step = make(_call("write_file", file_path="/new.py", content="print(1)")).ask("write code")
     assert [action.name for action in step.pending_actions] == ["write_file"]
     assert not (project / "new.py").exists()
+
+
+def test_speech_and_tool_use_stream_before_the_reply(make_agent):
+    make, _, _ = make_agent
+    events, speech = [], SpeechChannel()
+    speech.enabled = True
+    agent = make(_call("speak_to_user", text="Checking now."), _call("execute", command="ls"), events=events, speech=speech)
+    step = agent.ask("look around")
+    assert events == [Speech("Checking now."), ToolUse("execute", {"command": "ls"})]
+    assert step.reply == "All done."
