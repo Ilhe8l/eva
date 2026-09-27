@@ -318,7 +318,7 @@ class Terminal:
                 text = self.transcriber.transcribe(path)
             finally:
                 path.unlink(missing_ok=True)
-        except (ImportError, OSError, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001 - audio devices and model downloads fail in many ways
             print(f"Voice input unavailable: {exc}")
             return None
         if not text:

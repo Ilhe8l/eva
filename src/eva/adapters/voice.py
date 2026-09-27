@@ -65,8 +65,9 @@ class Microphone:
 
 
 class WhisperTranscriber:
-    def __init__(self, model_name: str = "large-v3-turbo") -> None:
+    def __init__(self, model_name: str = "large-v3-turbo", notify: Callable[[str], None] = lambda message: None) -> None:
         self.model_name = model_name
+        self.notify = notify
         self._model = None
         self._lock = threading.Lock()
 
@@ -78,6 +79,8 @@ class WhisperTranscriber:
             pass
 
     def transcribe(self, audio_path: Path) -> str:
+        if self._model is None and self._lock.locked():
+            self.notify("Waiting for the speech recognition model to finish loading...")
         # Greedy decoding (beam_size=1) keeps latency low for short commands.
         segments, _ = self._load().transcribe(str(audio_path), beam_size=1, vad_filter=True)
         return " ".join(segment.text.strip() for segment in segments).strip()
@@ -87,8 +90,20 @@ class WhisperTranscriber:
 
         with self._lock:
             if self._model is None:
+                if not self._is_downloaded():
+                    self.notify(f"Downloading speech recognition model '{self.model_name}' (first run only)...")
                 self._model = WhisperModel(self.model_name, device="auto", compute_type="default")
+                self.notify("Speech recognition ready.")
             return self._model
+
+    def _is_downloaded(self) -> bool:
+        from faster_whisper.utils import download_model
+
+        try:
+            download_model(self.model_name, local_files_only=True)
+        except Exception:  # noqa: BLE001 - any failure means it is not usable offline yet
+            return False
+        return True
 
 
 class Speaker(Protocol):

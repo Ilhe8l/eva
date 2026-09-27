@@ -34,7 +34,7 @@ def main() -> None:
         on_error=lambda exc: print(f"Voice output unavailable: {exc}"),
     )
     heartbeat = timedelta(minutes=settings.heartbeat_minutes) if settings.heartbeat_minutes > 0 else None
-    transcriber = WhisperTranscriber(model_name=args.whisper_model)
+    transcriber = WhisperTranscriber(model_name=args.whisper_model, notify=print)
     if importlib.util.find_spec("faster_whisper"):
         threading.Thread(target=transcriber.warm_up, daemon=True).start()
     if args.speak:
