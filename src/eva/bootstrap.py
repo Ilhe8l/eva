@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
+from dotenv import load_dotenv
 from langgraph.checkpoint.sqlite import SqliteSaver
+
+load_dotenv()
 
 from eva.adapters.agent import DeepAgentAdapter
 from eva.adapters.extensions import ExtensionStore

@@ -7,6 +7,7 @@ class SpeechOutbox:
     def __init__(self) -> None:
         self.enabled = False
         self._messages: list[str] = []
+        self.on_speak = None
 
     def enqueue(self, text: str) -> str:
         if not self.enabled:
@@ -16,6 +17,11 @@ class SpeechOutbox:
             return "No speech was queued because the text was empty."
         if len(spoken) > 1200:
             return "Speech was not queued: keep spoken content under 1200 characters."
+            
+        if self.on_speak:
+            self.on_speak(spoken)
+            return "Status update spoken to user in real-time."
+            
         self._messages.append(spoken)
         return "Speech queued for playback after this turn."
 
@@ -46,7 +52,7 @@ class Microphone:
 
 
 class WhisperTranscriber:
-    def __init__(self, model_name: str = "small") -> None:
+    def __init__(self, model_name: str = "tiny") -> None:
         self.model_name = model_name
         self._model = None
 
@@ -58,27 +64,59 @@ class WhisperTranscriber:
             self._model = WhisperModel(
                 self.model_name, device="cuda", compute_type="float16"
             )
-        segments, _ = self._model.transcribe(audio_path, beam_size=5, vad_filter=True)
+        # beam_size=1 força decodificação "greedy" (imediata) para latência quase zero
+        segments, _ = self._model.transcribe(audio_path, beam_size=1, vad_filter=True)
         return " ".join(segment.text.strip() for segment in segments).strip()
 
 
 class KokoroSpeaker:
     def __init__(self, voice: str = "af_heart", language: str = "a") -> None:
+        import threading
         self.voice = voice
         self.language = language
         self._pipeline = None
+        self._lock = threading.Lock()
+
+    def speak_async(self, text: str) -> None:
+        import threading
+        threading.Thread(target=self.speak, args=(text,), daemon=True).start()
 
     def speak(self, text: str) -> None:
-        import sounddevice as sd
-        from kokoro import KPipeline
-
-        if not text.strip():
-            return
-        if self._pipeline is None:
-            # Uses CUDA now that VRAM is free
-            self._pipeline = KPipeline(lang_code=self.language, repo_id="hexgrad/Kokoro-82M", device="cuda")
-
-        # Texto puro, sem filtros artificiais
-        for _, _, audio in self._pipeline(text, voice=self.voice):
-            sd.play(audio, samplerate=24000)
-            sd.wait()
+        with self._lock:
+            import os
+            import tempfile
+            import subprocess
+            import numpy as np
+            import soundfile as sf
+            from kokoro import KPipeline
+    
+            if not text.strip():
+                return
+            if self._pipeline is None:
+                # Força explicitamente a VRAM (CUDA) para máxima velocidade
+                self._pipeline = KPipeline(lang_code=self.language, device="cuda")
+    
+            audio_chunks = []
+            for _, _, audio in self._pipeline(text, voice=self.voice):
+                audio_chunks.append(audio)
+                
+            if audio_chunks:
+                full_audio = np.concatenate(audio_chunks)
+                # salva num wav temporário e toca com o player do sistema
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    temp_path = f.name
+                
+                sf.write(temp_path, full_audio, 24000)
+                
+                # Toca via player nativo do Linux (PulseAudio/PipeWire)
+                import shutil
+                if shutil.which("paplay"):
+                    subprocess.run(["paplay", temp_path])
+                elif shutil.which("aplay"):
+                    subprocess.run(["aplay", "-q", temp_path])
+                else:
+                    import sounddevice as sd
+                    sd.play(full_audio, samplerate=24000)
+                    sd.wait()
+                    
+                os.remove(temp_path)

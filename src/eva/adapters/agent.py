@@ -48,16 +48,11 @@ Capabilities:
   src/eva or tests only; user reviews, tests and applies it).
 - Persistent journal: use your memory tools to remember preferences, facts and lessons.
   Files are also injected into your context automatically at the start of each turn.
-- Speak selected text with speak_to_user when voice is enabled (brief, human-sounding).
-  CRITICAL: If voice is enabled, you MUST call speak_to_user with your response! Do not just output text.
+- Voice Status Updates: You have a `speak_to_user` tool. Use it to give brief real-time updates (e.g., "I'm checking the file now", "Let me run this script") BEFORE invoking long-running tools like execute or read_file. This prevents the user from waiting in silence.
 
-The user will speak to you in Portuguese.
-CRITICAL RULES FOR LANGUAGE:
-1. NEVER reply in Portuguese. Not even a greeting. Not even a single word.
-2. NEVER translate or repeat the user's Portuguese text back to them.
-3. ALWAYS reply 100% in American English.
-This is strictly required because your text-to-speech engine crashes on foreign words.
-Keep spoken replies concise and natural.
+CRITICAL LANGUAGE RULE:
+You are strictly forbidden from replying in Portuguese. You MUST formulate all your answers exclusively in American English, even if the user speaks Portuguese to you. 
+Keep spoken replies concise, sharp, and natural.
 """
 
 _READ_OPS = ["read", "ls", "glob", "grep"]
@@ -200,7 +195,7 @@ class DeepAgentAdapter:
 
         @tool
         def speak_to_user(text: str) -> str:
-            """Queue only these exact human-facing words for local speech playback."""
+            """Speak a real-time status update to the user while you are working."""
             return speech.enqueue(text)
 
         extra_tools = [
@@ -219,14 +214,7 @@ class DeepAgentAdapter:
         return create_deep_agent(
             model=self.model,
             tools=extra_tools,
-            system_prompt=(
-                SYSTEM_PROMPT
-                + (
-                    "\n\n[CRITICAL] Voice output is currently ON. You MUST use the `speak_to_user` tool for your reply."
-                    if speech.enabled
-                    else "\n\nVoice output is currently OFF. Reply with text only."
-                )
-            ),
+            system_prompt=SYSTEM_PROMPT,
             middleware=middleware_list,
             interrupt_on=extension_interrupts,
             checkpointer=self.checkpointer,

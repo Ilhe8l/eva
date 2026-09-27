@@ -81,8 +81,8 @@ def main() -> None:
     parser.add_argument("--model", help="Loaded LM Studio model ID")
     parser.add_argument("--speak", action="store_true", help="Speak each final reply")
     parser.add_argument("--whisper-model", default="small")
-    parser.add_argument("--voice", default=os.getenv("EVA_VOICE", "pf_dora"))
-    parser.add_argument("--voice-language", default=os.getenv("EVA_VOICE_LANGUAGE", "p"))
+    parser.add_argument("--voice", default=os.getenv("EVA_VOICE", "af_heart"))
+    parser.add_argument("--voice-language", default=os.getenv("EVA_VOICE_LANGUAGE", "a"))
     args = parser.parse_args()
 
     try:
@@ -99,6 +99,7 @@ def main() -> None:
     restart = False
     with bootstrap(settings, TerminalApproval()) as app:
         app.speech.enabled = speak
+        app.speech.on_speak = speaker.speak_async
         while True:
             try:
                 message = input("\nYou> ").strip()
@@ -151,13 +152,23 @@ def main() -> None:
                 continue
             print(f"\nEva> {reply}")
             app.summarizer.record(message, reply)
+            
             if app.session.denied_actions:
                 app.speech.drain()
-            for spoken_text in app.speech.drain():
-                try:
-                    speaker.speak(spoken_text)
-                except (ImportError, OSError, ValueError) as exc:
-                    print(f"Voice output unavailable: {exc}")
+            
+            # Limpa o que foi enviado pro outbox (se o LLM usou a tool por acaso)
+            tool_spoken = app.speech.drain()
+            
+            # Se a voz está ativa, fala a própria resposta de texto (melhor para modelos leves)
+            if app.speech.enabled:
+                import re
+                # Remove blocos de código para a Eva não tentar ler python
+                clean_reply = re.sub(r'```.*?```', '', reply, flags=re.DOTALL).strip()
+                if clean_reply:
+                    try:
+                        speaker.speak(clean_reply)
+                    except (ImportError, OSError, ValueError) as exc:
+                        print(f"Voice output unavailable: {exc}")
 
     if not restart:
         saved = app.summarizer.save()
