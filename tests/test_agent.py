@@ -9,14 +9,21 @@ from eva.adapters.agent import DeepAgentAdapter, Workspace
 from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.policy import approval_rules
+from eva.adapters.speech_mode import SPEECH_OFF, SPEECH_ON, SpeechModeMiddleware
 from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
 from eva.domain.models import Speech, ToolUse
 
 
 class ScriptedModel(GenericFakeChatModel):
+    prompts: list = []  # system prompt of every call
+
     def bind_tools(self, tools, **kwargs):
         return self
+
+    def _generate(self, messages, *args, **kwargs):
+        self.prompts.append(messages[0].text)
+        return super()._generate(messages, *args, **kwargs)
 
 
 def _call(name, **args):
@@ -30,7 +37,8 @@ def make_agent(tmp_path):
     (project / "notes.txt").write_text("keep me\n")
 
     def make(*messages, events=None, speech=None):
-        model = ScriptedModel(messages=iter([*messages, AIMessage(content="All done.")]))
+        model = ScriptedModel(messages=iter([*messages, AIMessage(content="All done.")]), prompts=[])
+        make.models.append(model)
         return DeepAgentAdapter(
             model,
             Workspace(project, tmp_path / "data"),
@@ -38,9 +46,11 @@ def make_agent(tmp_path):
             "test",
             tools=build_tools(speech or SpeechChannel(), SelfUpdater(project), FollowUpStore(tmp_path / "f.json")),
             interrupt_on=approval_rules(),
+            middleware=[SpeechModeMiddleware(speech or SpeechChannel())],
             on_event=events.append if events is not None else lambda event: None,
         )
 
+    make.models = []
     return make, project, tmp_path / "data" / "memory"
 
 
@@ -114,3 +124,15 @@ def test_forgetting_the_last_turn_keeps_earlier_ones(make_agent):
     agent.forget_last_turn()
     messages = agent._agent.get_state(agent.config).values["messages"]
     assert [message.content for message in messages] == ["hello", "Hi."]
+
+
+def test_model_is_told_whether_speech_is_on(make_agent):
+    make, _, _ = make_agent
+    speech = SpeechChannel()
+    agent = make(AIMessage(content="One."), speech=speech)
+    agent.ask("first")
+    speech.enabled = True
+    agent.ask("second")
+    first, second = make.models[-1].prompts
+    assert SPEECH_OFF in first and SPEECH_ON not in first
+    assert SPEECH_ON in second

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
-from langchain.agents.middleware import InterruptOnConfig
+from langchain.agents.middleware import AgentMiddleware, InterruptOnConfig
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langchain_core.tools import BaseTool
@@ -91,6 +91,7 @@ class DeepAgentAdapter:
         thread_id: str,
         tools: Sequence[BaseTool],
         interrupt_on: dict[str, InterruptOnConfig],
+        middleware: Sequence[AgentMiddleware] = (),
         on_event: Callable[[AgentEvent], None] = lambda event: None,
     ) -> None:
         self.on_event = on_event
@@ -104,6 +105,7 @@ class DeepAgentAdapter:
             memory=[MEMORY_INDEX],
             skills=[BUILTIN_SKILLS_ROUTE, SKILLS_ROUTE],
             interrupt_on=interrupt_on,
+            middleware=middleware,
             checkpointer=checkpointer,
             name="eva",
         )

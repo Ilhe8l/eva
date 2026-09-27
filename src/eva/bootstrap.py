@@ -14,6 +14,7 @@ from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.models import build_chat_model
 from eva.adapters.policy import approval_rules
+from eva.adapters.speech_mode import SpeechModeMiddleware
 from eva.adapters.summarizer import SessionSummarizer
 from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
@@ -52,6 +53,7 @@ def bootstrap(
             thread_id=settings.thread_id,
             tools=build_tools(speech, updater, follow_ups),
             interrupt_on=approval_rules(),
+            middleware=[SpeechModeMiddleware(speech)],
             on_event=on_event,
         )
         yield Application(

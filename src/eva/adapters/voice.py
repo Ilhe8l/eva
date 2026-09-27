@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import warnings
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Protocol
@@ -117,10 +118,14 @@ class KokoroSpeaker:
             _stream(self._synthesize(text), KOKORO_SAMPLE_RATE)
 
     def _synthesize(self, text: str) -> Iterator:
-        from kokoro import KPipeline
-
         if self._pipeline is None:
-            self._pipeline = KPipeline(lang_code=self.language, repo_id=KOKORO_REPO)
+            with warnings.catch_warnings():
+                # Kokoro's model code triggers torch deprecation warnings on load.
+                warnings.simplefilter("ignore", category=UserWarning)
+                warnings.simplefilter("ignore", category=FutureWarning)
+                from kokoro import KPipeline
+
+                self._pipeline = KPipeline(lang_code=self.language, repo_id=KOKORO_REPO)
         for _, _, audio in self._pipeline(text, voice=self.voice):
             yield audio.numpy()
 

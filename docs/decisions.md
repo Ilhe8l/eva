@@ -22,6 +22,15 @@ revisit the reasoning instead of rediscovering it.
   in-process loop covers the current needs with no extra service. They remain
   an option for long parallel jobs.
 
+## The model is told, on every call, whether speech is on
+
+A model cannot know whether anyone is listening unless it is told.
+`SpeechModeMiddleware` appends the current speech
+state to the system prompt on each model call. With speech on, Eva says the
+key sentence of each reply with `speak_to_user`, and she still chooses the
+words. The language rule explicitly forbids greetings in other languages,
+because the English Kokoro voice cannot pronounce them.
+
 ## Kokoro stays; speech streams by sentence
 
 Measured on a consumer GPU with 6 GB: Kokoro-82M synthesizes 7.3 s
