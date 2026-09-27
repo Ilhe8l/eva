@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from eva.application.session import EvaSession
 from eva.domain.models import ActionRequest, AgentStep
 
@@ -41,3 +43,30 @@ def test_rejected_action_is_reported_to_agent_and_user():
     session.send("clean up")
     assert agent.decisions[0]["type"] == "reject"
     assert session.denied_actions == ["execute"]
+
+
+class ScriptedAgent:
+    def __init__(self, reply):
+        self.reply = reply
+        self.messages = []
+        self.forgotten = 0
+
+    def ask(self, message):
+        self.messages.append(message)
+        return AgentStep(reply=self.reply)
+
+    def forget_last_turn(self):
+        self.forgotten += 1
+
+
+def test_idle_heartbeat_is_silent_and_forgotten():
+    agent = ScriptedAgent(" HEARTBEAT_OK ")
+    assert EvaSession(agent, FakeApproval(True)).heartbeat(datetime(2026, 1, 1, 9, 0)) is None
+    assert agent.messages[0].startswith("[heartbeat 2026-01-01 09:00]")
+    assert agent.forgotten == 1
+
+
+def test_useful_heartbeat_is_kept():
+    agent = ScriptedAgent("Your build finished.")
+    assert EvaSession(agent, FakeApproval(True)).heartbeat(datetime(2026, 1, 1)) == "Your build finished."
+    assert agent.forgotten == 0

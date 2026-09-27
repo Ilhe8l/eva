@@ -1,5 +1,8 @@
 """One conversational turn, including the human decisions it needs."""
 
+from datetime import datetime
+
+from eva.application.messages import HEARTBEAT_OK, heartbeat_message
 from eva.application.ports import AgentPort, ApprovalPort
 from eva.domain.models import AgentStep
 
@@ -21,6 +24,17 @@ class EvaSession:
                 return step.reply or ""
             step = self.agent.resume(self._decide(step))
         raise RuntimeError("Too many approval rounds in one turn")
+
+    def heartbeat(self, now: datetime) -> str | None:
+        """Let Eva act on her own; return her reply, or None if she had nothing to do.
+
+        Idle heartbeats are removed from the conversation so they do not pile up.
+        """
+        reply = self.send(heartbeat_message(now))
+        if reply.strip() == HEARTBEAT_OK:
+            self.agent.forget_last_turn()
+            return None
+        return reply
 
     def _decide(self, step: AgentStep) -> list[dict[str, str]]:
         decisions = []

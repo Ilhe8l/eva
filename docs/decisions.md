@@ -3,6 +3,33 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## Autonomy: background turns, heartbeats and follow-ups
+
+- The terminal is asynchronous (`prompt_toolkit`). Eva works on a background
+  thread while the user keeps typing. Messages typed meanwhile are queued for
+  her next turn. The keyboard has one reader, shared by messages and approval
+  answers.
+- **Heartbeat:** after `EVA_HEARTBEAT_MINUTES` of silence (default 30, 0
+  disables), Eva gets a `[heartbeat]` message and may act or speak. If she has
+  nothing to do, she replies `HEARTBEAT_OK`, and that exchange is removed from
+  the thread with `RemoveMessage` so idle checks do not fill the context.
+- **Follow-ups:** `schedule_follow_up` stores a note in
+  `.eva/follow_ups.json`, which survives restarts. A clock delivers it as a
+  `[follow-up]` message when due.
+- Deep Agents
+  [async subagents](https://docs.langchain.com/oss/python/deepagents/async-subagents)
+  need an Agent Protocol server (`langgraph dev` or a deployment). An
+  in-process loop covers the current needs with no extra service. They remain
+  an option for long parallel jobs.
+
+## Voice input is push-to-talk and framed for Eva
+
+`:record` listens until Enter. The transcript is shown to the user and sent as
+`[voice] ...`, so Eva knows it was spoken, may contain transcription errors,
+and deserves a spoken answer. The default Whisper model is `large-v3-turbo`.
+It is multilingual and fits on a 6 GB GPU next to
+Kokoro, since the chat model runs remotely.
+
 ## Self-extension through skills and reviewed source edits
 
 Eva extends herself with the mechanisms Deep Agents already provides:

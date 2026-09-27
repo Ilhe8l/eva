@@ -15,7 +15,7 @@ her journal waits for the user's approval.
 | Application | `eva.application` | A conversational turn and its approvals (`EvaSession`), ports |
 | Adapters | `eva.adapters` | Deep Agents, models, approval policy, tools, voice, restart, summaries |
 | Composition | `eva.bootstrap`, `eva.config` | Settings and wiring |
-| Interface | `eva.cli` | Terminal, microphone, speaker and approval prompts |
+| Interface | `eva.cli`, `eva.terminal` | Async terminal, microphone, speaker, approvals, heartbeat clock |
 
 The application layer depends only on its ports. Deep Agents, LangGraph and the
 voice models stay in adapters.

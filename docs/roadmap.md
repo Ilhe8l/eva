@@ -7,6 +7,6 @@
 3. **Self-extension** — Deep Agents skills written by Eva; reviewed edits to her
    own source with tests and restart. Done.
 4. **Autonomy** — background work while the user keeps talking, periodic
-   heartbeats and self-scheduled follow-ups.
+   heartbeats and self-scheduled follow-ups. Done.
 
 Later: desktop UI, wake word, stronger sandboxing for extension code.

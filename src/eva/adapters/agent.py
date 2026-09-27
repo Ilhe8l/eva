@@ -15,7 +15,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from langchain.agents.middleware import InterruptOnConfig
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer, Command
 
@@ -121,6 +121,14 @@ class DeepAgentAdapter:
             resume[interrupt_id] = {"decisions": decisions[start : start + count]}
             start += count
         return self._run(Command(resume=resume))
+
+    def forget_last_turn(self) -> None:
+        """Remove the latest user message and everything after it from the thread."""
+        messages = self._agent.get_state(self.config).values.get("messages", [])
+        starts = [index for index, message in enumerate(messages) if isinstance(message, HumanMessage)]
+        if starts:
+            removals = [RemoveMessage(id=message.id) for message in messages[starts[-1] :]]
+            self._agent.update_state(self.config, {"messages": removals})
 
     def _run(self, payload) -> AgentStep:
         for chunk in self._agent.stream(

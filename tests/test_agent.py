@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from eva.adapters.agent import DeepAgentAdapter, Workspace
+from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.policy import approval_rules
 from eva.adapters.tools import build_tools
@@ -35,7 +36,7 @@ def make_agent(tmp_path):
             Workspace(project, tmp_path / "data"),
             InMemorySaver(),
             "test",
-            tools=build_tools(speech or SpeechChannel(), SelfUpdater(project)),
+            tools=build_tools(speech or SpeechChannel(), SelfUpdater(project), FollowUpStore(tmp_path / "f.json")),
             interrupt_on=approval_rules(),
             on_event=events.append if events is not None else lambda event: None,
         )
@@ -103,3 +104,13 @@ def test_writing_a_skill_needs_approval(make_agent):
     make, _, _ = make_agent
     step = make(_call("write_file", file_path="/skills/x/SKILL.md", content="---\n---")).ask("learn")
     assert [action.name for action in step.pending_actions] == ["write_file"]
+
+
+def test_forgetting_the_last_turn_keeps_earlier_ones(make_agent):
+    make, _, _ = make_agent
+    agent = make(AIMessage(content="Hi."))
+    agent.ask("hello")
+    agent.ask("heartbeat")
+    agent.forget_last_turn()
+    messages = agent._agent.get_state(agent.config).values["messages"]
+    assert [message.content for message in messages] == ["hello", "Hi."]

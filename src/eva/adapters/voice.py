@@ -40,27 +40,30 @@ class SpeechChannel:
 
 
 class Microphone:
-    def record(self, seconds: float = 6.0) -> Path:
+    def record(self, until: Callable[[], object]) -> Path:
+        """Record from the default microphone until `until()` returns."""
+        import numpy as np
         import sounddevice as sd
         import soundfile as sf
 
-        if not 0.5 <= seconds <= 60:
-            raise ValueError("Recording length must be between 0.5 and 60 seconds")
-        audio = sd.rec(
-            int(seconds * MICROPHONE_SAMPLE_RATE),
+        chunks: list = []
+        with sd.InputStream(
             samplerate=MICROPHONE_SAMPLE_RATE,
             channels=1,
             dtype="float32",
-        )
-        sd.wait()
+            callback=lambda data, frames, time, status: chunks.append(data.copy()),
+        ):
+            until()
+        if not chunks:
+            raise ValueError("Nothing was recorded")
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as file:
             path = Path(file.name)
-        sf.write(path, audio, MICROPHONE_SAMPLE_RATE)
+        sf.write(path, np.concatenate(chunks), MICROPHONE_SAMPLE_RATE)
         return path
 
 
 class WhisperTranscriber:
-    def __init__(self, model_name: str = "small") -> None:
+    def __init__(self, model_name: str = "large-v3-turbo") -> None:
         self.model_name = model_name
         self._model = None
 

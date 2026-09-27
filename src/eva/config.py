@@ -14,6 +14,7 @@ class Settings:
     data_dir: Path = field(default_factory=lambda: Path(".eva"))
     project_root: Path = field(default_factory=Path.cwd)
     thread_id: str = "main"
+    heartbeat_minutes: float = 30
 
     @classmethod
     def from_env(cls, model: str | None = None) -> "Settings":
@@ -31,4 +32,5 @@ class Settings:
             data_dir=Path(os.getenv("EVA_DATA_DIR", project_root / ".eva")).resolve(),
             project_root=project_root,
             thread_id=os.getenv("EVA_THREAD_ID", cls.thread_id),
+            heartbeat_minutes=float(os.getenv("EVA_HEARTBEAT_MINUTES", cls.heartbeat_minutes)),
         )

@@ -35,9 +35,14 @@ microphone and speakers. It uses the GPU when one is available.
 | Command | Action |
 | --- | --- |
 | any text | Talk to Eva |
-| `:record 6` | Record six seconds, transcribe and send |
+| `:record` | Talk; press Enter to stop. The transcript is shown and sent |
 | `:speak on` / `:speak off` | Let Eva speak aloud |
 | `:quit` | Exit and save a session summary |
+
+You can keep typing while Eva works; your message reaches her after her
+current task. After `EVA_HEARTBEAT_MINUTES` of silence (default 30), she checks
+her journal and may act on her own. She can also schedule follow-ups for
+herself.
 
 ## Growing Eva
 
@@ -56,6 +61,7 @@ Everything Eva keeps lives in `.eva/`:
   `sessions/` holds session summaries.
 - `skills/`: skills Eva wrote for you.
 - `checkpoints.sqlite`: the conversation, which survives restarts.
+- `follow_ups.json`: reminders Eva scheduled for herself.
 
 ## Container
 
