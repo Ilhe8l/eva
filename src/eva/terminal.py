@@ -206,6 +206,7 @@ class Terminal:
         self._stop = asyncio.Event()
         self._busy = False
         self._last_activity = now()
+        self._recording: asyncio.Task | None = None
 
     @property
     def restart(self) -> bool:
@@ -235,12 +236,16 @@ class Terminal:
             if line in {":quit", ":exit"}:
                 break
             self._last_activity = now()
-            message = await self._command(line) if line.startswith(":") else line
-            if message:
-                if self._busy:
-                    print("(Eva will read this after her current task.)")
-                await self._turns.put(Turn(TurnKind.USER, message))
+            if line.startswith(":"):
+                self._command(line)
+            else:
+                await self._submit(line)
         self._stop.set()
+
+    async def _submit(self, message: str) -> None:
+        if self._busy:
+            print("(Eva will read this after her current task.)")
+        await self._turns.put(Turn(TurnKind.USER, message))
 
     async def _work(self) -> None:
         while True:
@@ -284,25 +289,31 @@ class Terminal:
         if turn.kind is TurnKind.USER:
             self.app.summarizer.record(turn.message, reply)
 
-    async def _command(self, line: str) -> str | None:
-        """Handle a terminal command; return a message to send to Eva, if any."""
+    def _command(self, line: str) -> None:
         name, _, argument = line.partition(" ")
         argument = argument.strip()
         if name == ":record":
-            return await in_daemon_thread(self._listen)
-        if name == ":speak" and argument in {"on", "off"}:
+            # Record in the background: the keyboard reader must stay free to see Enter.
+            if self._recording is None or self._recording.done():
+                self._recording = asyncio.create_task(self._record())
+        elif name == ":speak" and argument in {"on", "off"}:
             self.app.speech.enabled = argument == "on"
             if self.app.speech.enabled:
                 self.player.warm_up()
             print(f"Speech {argument}.")
         else:
             print(HELP)
-        return None
+
+    async def _record(self) -> None:
+        message = await in_daemon_thread(self._listen)
+        if message:
+            await self._submit(message)
 
     def _listen(self) -> str | None:
         """Record until Enter, transcribe, and show the user what Eva will read."""
         try:
             path = self.microphone.record(until=lambda: self.console.ask("Listening... press Enter to stop. "))
+            print("Transcribing...")
             try:
                 text = self.transcriber.transcribe(path)
             finally:
