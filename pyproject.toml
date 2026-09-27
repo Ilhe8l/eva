@@ -24,6 +24,7 @@ voice = [
     "en-core-web-sm",  # English pipeline Kokoro loads at runtime
     "faster-whisper>=1.2,<2",
     "kokoro>=0.9.4,<1",
+    "nvidia-cublas-cu12>=12.4,<13; sys_platform == 'linux'",  # CTranslate2 (Whisper) is built for CUDA 12
     "sounddevice>=0.5,<1",
     "soundfile>=0.13,<1",
 ]

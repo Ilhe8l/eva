@@ -6,6 +6,8 @@ https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md).
 Heavy imports are deferred so a text-only install still works.
 """
 
+import ctypes
+import importlib.util
 import queue
 import shutil
 import subprocess
@@ -92,9 +94,29 @@ class WhisperTranscriber:
             if self._model is None:
                 if not self._is_downloaded():
                     self.notify(f"Downloading speech recognition model '{self.model_name}' (first run only)...")
-                self._model = WhisperModel(self.model_name, device="auto", compute_type="default")
+                self._model = self._on_gpu(WhisperModel) or WhisperModel(
+                    self.model_name, device="cpu", compute_type="int8"
+                )
                 self.notify("Speech recognition ready.")
             return self._model
+
+    def _on_gpu(self, model_class):
+        """The model on CUDA, or None when the GPU or its libraries are unavailable.
+
+        CTranslate2 is built for CUDA 12. The pip wheel `nvidia-cublas-cu12`
+        provides cuBLAS; it is loaded here because it is not on the linker path.
+        """
+        import numpy as np
+
+        _load_cublas_12()
+        try:
+            model = model_class(self.model_name, device="cuda", compute_type="float16")
+            segments, _ = model.transcribe(np.zeros(MICROPHONE_SAMPLE_RATE, dtype=np.float32), language="en")
+            list(segments)  # runs the encoder now, so missing CUDA libraries fail here
+        except (RuntimeError, ValueError) as exc:
+            self.notify(f"Speech recognition runs on the CPU (slower): {exc}")
+            return None
+        return model
 
     def _is_downloaded(self) -> bool:
         from faster_whisper.utils import download_model
@@ -104,6 +126,16 @@ class WhisperTranscriber:
         except Exception:  # noqa: BLE001 - any failure means it is not usable offline yet
             return False
         return True
+
+
+def _load_cublas_12() -> None:
+    spec = importlib.util.find_spec("nvidia.cublas")
+    if spec is None or not spec.submodule_search_locations:
+        return
+    lib_dir = Path(next(iter(spec.submodule_search_locations))) / "lib"
+    for name in ("libcublasLt.so.12", "libcublas.so.12"):
+        if (lib_dir / name).exists():
+            ctypes.CDLL(str(lib_dir / name), mode=ctypes.RTLD_GLOBAL)
 
 
 class Speaker(Protocol):

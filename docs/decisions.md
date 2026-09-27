@@ -22,6 +22,16 @@ revisit the reasoning instead of rediscovering it.
   in-process loop covers the current needs with no extra service. They remain
   an option for long parallel jobs.
 
+## Whisper on the GPU needs cuBLAS for CUDA 12
+
+`faster-whisper` runs on CTranslate2, whose wheels are built for CUDA 12. The
+torch build Kokoro uses ships CUDA 13, so `libcublas.so.12` has to come from
+somewhere else. The voice extra installs
+`nvidia-cublas-cu12`, and `WhisperTranscriber` loads it with `ctypes` before
+creating the model. If the GPU still fails, Eva says so and falls back to the
+CPU (int8). On a consumer GPU, a short phrase takes about 1.2 s on the GPU
+and about 8 s on the CPU.
+
 ## The model is told, on every call, whether speech is on
 
 A model cannot know whether anyone is listening unless it is told.
