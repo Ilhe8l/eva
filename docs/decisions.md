@@ -3,6 +3,25 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## Self-extension through skills and reviewed source edits
+
+Eva extends herself with the mechanisms Deep Agents already provides:
+
+- **Skills** ([docs](https://docs.langchain.com/oss/python/deepagents/skills)):
+  Eva writes `/skills/<name>/SKILL.md` and optional scripts, stored in
+  `.eva/skills/`, so they are personal and outside Git. Bundled skills live in
+  `src/eva/skills/` and are mounted at `/builtin-skills/`. Writing a skill needs
+  approval, and so does running its scripts, like any non-read-only command.
+  Scripts are standalone `uv` scripts with inline dependencies, so they never
+  change Eva's own environment. Each message passes `skills_metadata: None`,
+  which makes skills created mid-session appear on the next message.
+- **Source edits:** Eva edits `/src/eva/` and `/tests/` with the normal file
+  tools. Every edit is shown as a diff for approval. `restart_eva` runs the
+  test suite and restarts the process only if it passes. The checkpointed
+  conversation continues after the restart. Git remains the undo mechanism.
+
+A skill covers a new ability. A source edit covers Eva's core behavior.
+
 ## Progress is streamed, speech plays while Eva works
 
 The adapter runs `agent.stream(stream_mode=["updates", "custom"],
@@ -29,7 +48,6 @@ with `when` predicates (`adapters/policy.py`):
 | Writes, edits and deletes under `/memories/` (the journal) | none |
 | Any other write, edit or delete | required |
 | Reading secret files with `read_file` | required |
-| Activated extension tools | required |
 
 `tests/test_agent.py` runs the real graph with a scripted model to keep this true.
 

@@ -37,9 +37,16 @@ microphone and speakers. It uses the GPU when one is available.
 | any text | Talk to Eva |
 | `:record 6` | Record six seconds, transcribe and send |
 | `:speak on` / `:speak off` | Let Eva speak aloud |
-| `:tools` / `:activate NAME` | List / review and activate proposed tools |
-| `:patches` / `:apply NAME` | List / review, test and apply source patches |
 | `:quit` | Exit and save a session summary |
+
+## Growing Eva
+
+When Eva lacks an ability, she writes a
+[skill](https://docs.langchain.com/oss/python/deepagents/skills): a
+`SKILL.md` with instructions, plus optional `uv` scripts. Skills live in
+`.eva/skills/` and become available from the next message. To change her core
+behavior, she edits `src/eva/` and `tests/`. You approve each diff, and then
+`restart_eva` runs the tests and restarts her if they pass.
 
 ## Data
 
@@ -47,8 +54,8 @@ Everything Eva keeps lives in `.eva/`:
 
 - `memory/`: her journal. `AGENTS.md` is loaded into every conversation, and
   `sessions/` holds session summaries.
+- `skills/`: skills Eva wrote for you.
 - `checkpoints.sqlite`: the conversation, which survives restarts.
-- `extensions/`, `patches/`: proposals waiting for review.
 
 ## Container
 

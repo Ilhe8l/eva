@@ -8,6 +8,7 @@ https://docs.langchain.com/oss/python/deepagents/streaming
 
 import os
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from deepagents import create_deep_agent
@@ -18,33 +19,58 @@ from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer, Command
 
-from eva.adapters.policy import MEMORY_ROUTE
+from eva.adapters.policy import BUILTIN_SKILLS_ROUTE, MEMORY_ROUTE, SKILLS_ROUTE
 from eva.adapters.voice import SPEECH_EVENT
 from eva.domain.models import ActionRequest, AgentEvent, AgentStep, Speech, ToolUse
-from eva.prompts import SYSTEM_PROMPT
+from eva.prompts import build_system_prompt
 
+BUILTIN_SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
 MEMORY_INDEX = f"{MEMORY_ROUTE}AGENTS.md"
 SHELL_TIMEOUT_SECONDS = 120
 SILENT_TOOLS = {"speak_to_user"}
 _SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
 
 
-def build_backend(project_root: Path, memory_dir: Path) -> CompositeBackend:
-    """Project files at `/`, the journal at `/memories/`, shell in the project.
+@dataclass(frozen=True)
+class Workspace:
+    """What Eva's file tools see, and where it lives on disk.
 
+    `/` is the project (with shell execution), `/memories/` the journal,
+    `/skills/` her own skills and `/builtin-skills/` the bundled ones.
     `virtual_mode=True` confines file tools to each root; it does not confine
     shell commands, which the approval policy covers instead.
     """
-    memory_dir.mkdir(parents=True, exist_ok=True)
-    return CompositeBackend(
-        default=LocalShellBackend(
-            root_dir=project_root,
-            virtual_mode=True,
-            timeout=SHELL_TIMEOUT_SECONDS,
-            env=_shell_env(),
-        ),
-        routes={MEMORY_ROUTE: FilesystemBackend(root_dir=memory_dir, virtual_mode=True)},
-    )
+
+    project_root: Path
+    data_dir: Path
+
+    @property
+    def memory_dir(self) -> Path:
+        return self.data_dir / "memory"
+
+    @property
+    def skills_dir(self) -> Path:
+        return self.data_dir / "skills"
+
+    def backend(self) -> CompositeBackend:
+        for directory in (self.memory_dir, self.skills_dir):
+            directory.mkdir(parents=True, exist_ok=True)
+        return CompositeBackend(
+            default=LocalShellBackend(
+                root_dir=self.project_root,
+                virtual_mode=True,
+                timeout=SHELL_TIMEOUT_SECONDS,
+                env=_shell_env(),
+            ),
+            routes={
+                MEMORY_ROUTE: FilesystemBackend(root_dir=self.memory_dir, virtual_mode=True),
+                SKILLS_ROUTE: FilesystemBackend(root_dir=self.skills_dir, virtual_mode=True),
+                BUILTIN_SKILLS_ROUTE: FilesystemBackend(root_dir=BUILTIN_SKILLS_DIR, virtual_mode=True),
+            },
+        )
+
+    def system_prompt(self) -> str:
+        return build_system_prompt(self.skills_dir, BUILTIN_SKILLS_DIR)
 
 
 def _shell_env() -> dict[str, str]:
@@ -60,34 +86,31 @@ class DeepAgentAdapter:
     def __init__(
         self,
         model: BaseChatModel,
-        backend: CompositeBackend,
+        workspace: Workspace,
         checkpointer: Checkpointer,
         thread_id: str,
+        tools: Sequence[BaseTool],
+        interrupt_on: dict[str, InterruptOnConfig],
         on_event: Callable[[AgentEvent], None] = lambda event: None,
     ) -> None:
-        self.model = model
         self.on_event = on_event
-        self.backend = backend
-        self.checkpointer = checkpointer
         self.config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 150}
-        self._agent = None
         self._pending: list[tuple[str, int]] = []
-
-    def configure(self, tools: Sequence[BaseTool], interrupt_on: dict[str, InterruptOnConfig]) -> None:
-        """(Re)build the agent graph; call again when the tool set changes."""
         self._agent = create_deep_agent(
-            model=self.model,
+            model=model,
             tools=list(tools),
-            system_prompt=SYSTEM_PROMPT,
-            backend=self.backend,
+            system_prompt=workspace.system_prompt(),
+            backend=workspace.backend(),
             memory=[MEMORY_INDEX],
+            skills=[BUILTIN_SKILLS_ROUTE, SKILLS_ROUTE],
             interrupt_on=interrupt_on,
-            checkpointer=self.checkpointer,
+            checkpointer=checkpointer,
             name="eva",
         )
 
     def ask(self, message: str) -> AgentStep:
-        return self._run({"messages": [{"role": "user", "content": message}]})
+        # A None skills_metadata makes SkillsMiddleware rescan, so new skills appear.
+        return self._run({"messages": [{"role": "user", "content": message}], "skills_metadata": None})
 
     def resume(self, decisions: list[dict[str, str]]) -> AgentStep:
         if not self._pending:
@@ -100,8 +123,6 @@ class DeepAgentAdapter:
         return self._run(Command(resume=resume))
 
     def _run(self, payload) -> AgentStep:
-        if self._agent is None:
-            raise RuntimeError("Call configure() before running the agent")
         for chunk in self._agent.stream(
             payload,
             config=self.config,

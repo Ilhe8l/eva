@@ -9,10 +9,9 @@ from dataclasses import dataclass
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from eva.adapters.agent import DeepAgentAdapter, build_backend
-from eva.adapters.extensions import ExtensionStore
+from eva.adapters.agent import DeepAgentAdapter, Workspace
+from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.models import build_chat_model
-from eva.adapters.patches import PatchStore
 from eva.adapters.policy import approval_rules
 from eva.adapters.summarizer import SessionSummarizer
 from eva.adapters.tools import build_tools
@@ -26,17 +25,9 @@ from eva.domain.models import AgentEvent
 @dataclass
 class Application:
     session: EvaSession
-    agent: DeepAgentAdapter
-    extensions: ExtensionStore
-    patches: PatchStore
     speech: SpeechChannel
+    updater: SelfUpdater
     summarizer: SessionSummarizer
-
-    def reload_tools(self) -> None:
-        """Rebuild the agent after the set of active extensions changed."""
-        tools = build_tools(self.speech, self.extensions, self.patches)
-        active = [item.name for item in self.extensions.list_active()]
-        self.agent.configure(tools, approval_rules(always_ask=active))
 
 
 @contextmanager
@@ -45,24 +36,24 @@ def bootstrap(
     approval: ApprovalPort,
     on_event: Callable[[AgentEvent], None],
 ) -> Iterator[Application]:
-    settings.data_dir.mkdir(parents=True, exist_ok=True)
-    memory_dir = settings.data_dir / "memory"
+    workspace = Workspace(settings.project_root, settings.data_dir)
     model = build_chat_model(settings.model, settings.lm_studio_url)
+    speech = SpeechChannel()
+    updater = SelfUpdater(settings.project_root)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
     with SqliteSaver.from_conn_string(str(settings.data_dir / "checkpoints.sqlite")) as checkpointer:
         agent = DeepAgentAdapter(
             model=model,
-            backend=build_backend(settings.project_root, memory_dir),
+            workspace=workspace,
             checkpointer=checkpointer,
             thread_id=settings.thread_id,
+            tools=build_tools(speech, updater),
+            interrupt_on=approval_rules(),
             on_event=on_event,
         )
-        app = Application(
+        yield Application(
             session=EvaSession(agent=agent, approval=approval),
-            agent=agent,
-            extensions=ExtensionStore(settings.data_dir),
-            patches=PatchStore(settings.data_dir, settings.project_root),
-            speech=SpeechChannel(),
-            summarizer=SessionSummarizer(model, memory_dir / "sessions"),
+            speech=speech,
+            updater=updater,
+            summarizer=SessionSummarizer(model, workspace.memory_dir / "sessions"),
         )
-        app.reload_tools()
-        yield app

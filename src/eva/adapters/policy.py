@@ -12,13 +12,15 @@ Read-only shell commands and memory writes run freely. Everything else pauses.
 
 import posixpath
 import shlex
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from pathlib import PurePosixPath
 
 from langchain.agents.middleware import InterruptOnConfig
 from langchain.tools.tool_node import ToolCallRequest
 
 MEMORY_ROUTE = "/memories/"
+SKILLS_ROUTE = "/skills/"
+BUILTIN_SKILLS_ROUTE = "/builtin-skills/"
 FREE_WRITE_PREFIXES = (MEMORY_ROUTE,)
 SENSITIVE_MARKERS = (".env", ".ssh", ".gnupg", ".aws", ".netrc", "id_rsa", "id_ed25519", "credentials")
 _CHAIN_OPERATORS = {"|", "&&", "||"}
@@ -124,22 +126,17 @@ def _path_arg(request: ToolCallRequest) -> str:
     return str(request.tool_call["args"].get("file_path", ""))
 
 
-def _approval(when: Callable[[ToolCallRequest], bool] | None = None) -> InterruptOnConfig:
-    config = InterruptOnConfig(allowed_decisions=["approve", "reject"])
-    if when is not None:
-        config["when"] = when
-    return config
+def _approval(when: Callable[[ToolCallRequest], bool]) -> InterruptOnConfig:
+    return InterruptOnConfig(allowed_decisions=["approve", "reject"], when=when)
 
 
-def approval_rules(always_ask: Iterable[str] = ()) -> dict[str, InterruptOnConfig]:
+def approval_rules() -> dict[str, InterruptOnConfig]:
     """Build the `interrupt_on` mapping for `create_deep_agent`."""
     write_rule = _approval(lambda request: needs_write_approval(_path_arg(request)))
-    rules = {
+    return {
         "execute": _approval(lambda request: not is_safe_command(str(request.tool_call["args"].get("command", "")))),
         "read_file": _approval(lambda request: is_sensitive_path(_path_arg(request))),
         "write_file": write_rule,
         "edit_file": write_rule,
         "delete": write_rule,
     }
-    rules.update({name: _approval() for name in always_ask})
-    return rules

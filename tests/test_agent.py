@@ -5,9 +5,8 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from eva.adapters.agent import DeepAgentAdapter, build_backend
-from eva.adapters.extensions import ExtensionStore
-from eva.adapters.patches import PatchStore
+from eva.adapters.agent import DeepAgentAdapter, Workspace
+from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.policy import approval_rules
 from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
@@ -31,15 +30,17 @@ def make_agent(tmp_path):
 
     def make(*messages, events=None, speech=None):
         model = ScriptedModel(messages=iter([*messages, AIMessage(content="All done.")]))
-        backend = build_backend(project, tmp_path / "memory")
-        on_event = events.append if events is not None else lambda event: None
-        agent = DeepAgentAdapter(model, backend, InMemorySaver(), "test", on_event=on_event)
-        data = tmp_path / "data"
-        tools = build_tools(speech or SpeechChannel(), ExtensionStore(data), PatchStore(data, project))
-        agent.configure(tools, approval_rules())
-        return agent
+        return DeepAgentAdapter(
+            model,
+            Workspace(project, tmp_path / "data"),
+            InMemorySaver(),
+            "test",
+            tools=build_tools(speech or SpeechChannel(), SelfUpdater(project)),
+            interrupt_on=approval_rules(),
+            on_event=events.append if events is not None else lambda event: None,
+        )
 
-    return make, project, tmp_path / "memory"
+    return make, project, tmp_path / "data" / "memory"
 
 
 def test_unsafe_shell_command_waits_for_approval(make_agent):
@@ -79,3 +80,26 @@ def test_speech_and_tool_use_stream_before_the_reply(make_agent):
     step = agent.ask("look around")
     assert events == [Speech("Checking now."), ToolUse("execute", {"command": "ls"})]
     assert step.reply == "All done."
+
+
+def _skill_names(agent):
+    return {skill["name"] for skill in agent._agent.get_state(agent.config).values.get("skills_metadata") or []}
+
+
+def test_skills_written_mid_session_appear_on_the_next_message(make_agent, tmp_path):
+    make, _, _ = make_agent
+    agent = make(AIMessage(content="First."))
+    agent.ask("hello")
+    assert "skill-authoring" in _skill_names(agent)
+
+    skill = tmp_path / "data" / "skills" / "greeting"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("---\nname: greeting\ndescription: Greet people warmly.\n---\n\nSay hi.\n")
+    agent.ask("again")
+    assert {"skill-authoring", "greeting"} <= _skill_names(agent)
+
+
+def test_writing_a_skill_needs_approval(make_agent):
+    make, _, _ = make_agent
+    step = make(_call("write_file", file_path="/skills/x/SKILL.md", content="---\n---")).ask("learn")
+    assert [action.name for action in step.pending_actions] == ["write_file"]

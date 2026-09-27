@@ -5,7 +5,7 @@
 2. **Streaming** — stream the agent's events so Eva can speak while she works.
    Done.
 3. **Self-extension** — Deep Agents skills written by Eva; reviewed edits to her
-   own source with tests and restart.
+   own source with tests and restart. Done.
 4. **Autonomy** — background work while the user keeps talking, periodic
    heartbeats and self-scheduled follow-ups.
 

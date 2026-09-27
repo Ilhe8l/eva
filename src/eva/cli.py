@@ -13,7 +13,8 @@ from eva.domain.models import ActionRequest, AgentEvent, Speech, ToolUse
 YES = {"y", "yes", "s", "sim"}
 PREVIEW_LINES = 40
 SUMMARY_WIDTH = 100
-HELP = "Commands: :record [seconds], :speak on|off, :tools, :activate NAME, :patches, :apply NAME, :quit"
+HELP = "Commands: :record [seconds], :speak on|off, :quit"
+RESUMED_MESSAGE = "(You were just restarted with your edited source. Confirm briefly and carry on.)"
 
 
 def confirm(question: str) -> bool:
@@ -79,49 +80,20 @@ def summarize(name: str, arguments: dict) -> str:
     return line if len(line) <= SUMMARY_WIDTH else f"{line[: SUMMARY_WIDTH - 1]}…"
 
 
-def activate_extension(app: Application, name: str) -> None:
-    try:
-        proposal = app.extensions.read_proposal(name)
-    except (FileNotFoundError, ValueError) as exc:
-        print(f"Cannot open proposal: {exc}")
-        return
-    print(f"\n{name}: {proposal.description}\n\n{proposal.source}")
-    if not confirm("Activate this exact Python source?"):
-        print("Proposal remains inactive.")
-        return
-    app.extensions.activate(name, expected=proposal)
-    app.reload_tools()
-    print("Activated. Eva can use it now; each call still asks for approval.")
-
-
-def apply_patch(app: Application, name: str) -> bool:
-    try:
-        proposal = app.patches.read(name)
-    except (FileNotFoundError, ValueError) as exc:
-        print(f"Cannot open patch: {exc}")
-        return False
-    print(f"\n{name}: {proposal.description}\n\n{proposal.diff}")
-    if not confirm("Apply this exact patch and run tests?"):
-        print("Patch remains unapplied.")
-        return False
-    try:
-        success, detail = app.patches.apply(name, expected=proposal)
-    except (OSError, ValueError) as exc:
-        print(f"Patch could not be applied: {exc}")
-        return False
-    print(detail)
-    return success
-
-
 class Terminal:
     def __init__(self, app: Application, transcriber: WhisperTranscriber) -> None:
         self.app = app
         self.transcriber = transcriber
         self.microphone = Microphone()
-        self.restart = False
 
-    def run(self) -> None:
+    @property
+    def restart(self) -> bool:
+        return self.app.updater.restart_requested
+
+    def run(self, resumed: bool = False) -> None:
         print(f"Eva is ready. {HELP}")
+        if resumed:
+            self.converse(RESUMED_MESSAGE)
         while True:
             try:
                 line = input("\nYou> ").strip()
@@ -149,15 +121,6 @@ class Terminal:
         if name == ":speak" and argument in {"on", "off"}:
             self.app.speech.enabled = argument == "on"
             print(f"Speech {argument}.")
-        elif name == ":tools":
-            print("Active:", ", ".join(item.name for item in self.app.extensions.list_active()) or "none")
-            print("Proposals:", ", ".join(self.app.extensions.list_proposals()) or "none")
-        elif name == ":activate" and argument:
-            activate_extension(self.app, argument)
-        elif name == ":patches":
-            print("Source patches:", ", ".join(self.app.patches.list()) or "none")
-        elif name == ":apply" and argument:
-            self.restart = apply_patch(self.app, argument)
         else:
             print(HELP)
         return None
@@ -194,6 +157,7 @@ def main() -> None:
     parser.add_argument("--whisper-model", default=os.getenv("EVA_WHISPER_MODEL", "small"))
     parser.add_argument("--voice", default=os.getenv("EVA_VOICE", "af_heart"))
     parser.add_argument("--voice-language", default=os.getenv("EVA_VOICE_LANGUAGE", "a"))
+    parser.add_argument("--resumed", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
         settings = Settings.from_env(args.model)
@@ -207,14 +171,17 @@ def main() -> None:
     with bootstrap(settings, TerminalApproval(), ProgressView(player)) as app:
         app.speech.enabled = args.speak
         terminal = Terminal(app, WhisperTranscriber(model_name=args.whisper_model))
-        terminal.run()
+        terminal.run(resumed=args.resumed)
         player.wait()
+        speaking = app.speech.enabled
         if not terminal.restart and (saved := app.summarizer.save()):
             print(f"\n[Session summary saved to {saved}]")
 
     if terminal.restart:
         print("Restarting Eva with the updated source...")
-        os.execv(sys.executable, [sys.executable, "-m", "eva.cli", *sys.argv[1:]])
+        options = [option for option in sys.argv[1:] if option not in {"--resumed", "--speak"}]
+        options += ["--resumed", *(["--speak"] if speaking else [])]
+        os.execv(sys.executable, [sys.executable, "-m", "eva.cli", *options])
 
 
 if __name__ == "__main__":
