@@ -3,6 +3,15 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## The reply streams as it is written
+
+The main thread adds `messages` to its stream modes. Text chunks from the
+top-level `model` node become `TextDelta` events, and the terminal prints them
+line by line (prompt_toolkit redraws the input line on each write, so partial
+lines would be torn apart). The final reply is not printed again once it was
+streamed. Background tasks do not stream, because only their report matters.
+Heartbeat turns are muted, so an idle `HEARTBEAT_OK` never shows.
+
 ## Steering: messages reach Eva mid-task
 
 Messages typed while the main turn runs are not queued behind it.

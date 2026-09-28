@@ -65,7 +65,7 @@ def bootstrap(
             middleware=[SpeechModeMiddleware(speech)],
         )
         app = Application(
-            session=EvaSession(agent=agent.thread(settings.thread_id, on_event), approval=approval),
+            session=EvaSession(agent=agent.thread(settings.thread_id, on_event, stream_text=True), approval=approval),
             speech=speech,
             updater=updater,
             follow_ups=follow_ups,

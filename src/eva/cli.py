@@ -43,9 +43,10 @@ def main() -> None:
         player.warm_up()
     policy = ApprovalPolicy(autonomous=settings.autonomous)
     notifier = DesktopNotifier()
-    with bootstrap(settings, policy, ConsoleApproval(console, policy, notifier), ProgressView(player)) as app:
+    progress = ProgressView(player)
+    with bootstrap(settings, policy, ConsoleApproval(console, policy, notifier), progress) as app:
         app.speech.enabled = args.speak
-        terminal = Terminal(app, console, transcriber, player, heartbeat, notifier)
+        terminal = Terminal(app, console, transcriber, player, heartbeat, notifier, progress)
         asyncio.run(terminal.run(resumed=args.resumed))
         player.wait()
         speaking = app.speech.enabled

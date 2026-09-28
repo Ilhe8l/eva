@@ -16,14 +16,14 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from langchain.agents.middleware import AgentMiddleware, InterruptOnConfig
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, RemoveMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer, Command
 
 from eva.adapters.policy import BUILTIN_SKILLS_ROUTE, MEMORY_ROUTE, SKILLS_ROUTE
 from eva.adapters.steering import SteeringInbox, SteeringMiddleware
 from eva.adapters.voice import SPEECH_EVENT
-from eva.domain.models import ActionRequest, AgentEvent, AgentStep, Speech, ToolUse, TurnCancelled
+from eva.domain.models import ActionRequest, AgentEvent, AgentStep, Speech, TextDelta, ToolUse, TurnCancelled
 from eva.prompts import build_system_prompt
 
 BUILTIN_SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
@@ -115,8 +115,10 @@ class DeepAgentAdapter:
         thread_id: str,
         on_event: Callable[[AgentEvent], None] = lambda event: None,
         source: str | None = None,
+        stream_text: bool = False,
     ) -> "AgentThread":
-        return AgentThread(self.graph, self.inbox, thread_id, on_event, source)
+        """A conversation on the shared graph; `stream_text` also reports reply text as it is generated."""
+        return AgentThread(self.graph, self.inbox, thread_id, on_event, source, stream_text)
 
 
 class AgentThread:
@@ -133,8 +135,10 @@ class AgentThread:
         thread_id: str,
         on_event: Callable[[AgentEvent], None],
         source: str | None,
+        stream_text: bool = False,
     ) -> None:
         self._graph = graph
+        self._stream_modes = ["updates", "custom", *(["messages"] if stream_text else [])]
         self._inbox = inbox
         self._thread_id = thread_id
         self.config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 150}
@@ -182,7 +186,7 @@ class AgentThread:
         for chunk in self._graph.stream(
             payload,
             config=self.config,
-            stream_mode=["updates", "custom"],
+            stream_mode=self._stream_modes,
             subgraphs=True,
             version="v2",
         ):
@@ -207,6 +211,11 @@ class AgentThread:
 def _events(chunk: dict) -> list[AgentEvent]:
     """Translate one v2 stream chunk into progress events."""
     data = chunk["data"]
+    if chunk["type"] == "messages":
+        message, metadata = data
+        is_reply = not chunk["ns"] and metadata.get("langgraph_node") == "model"
+        text = message.text if isinstance(message, AIMessageChunk) and is_reply else ""
+        return [TextDelta(text)] if text else []
     if chunk["type"] == "custom":
         is_speech = isinstance(data, dict) and data.get("type") == SPEECH_EVENT
         return [Speech(data["text"])] if is_speech else []

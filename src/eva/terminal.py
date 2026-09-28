@@ -26,7 +26,7 @@ from eva.adapters.voice import Microphone, SpeechPlayer, WhisperTranscriber
 from eva.application.messages import RESUMED_MESSAGE, follow_up_message, task_report_message, voice_message
 from eva.application.tasks import BackgroundTask
 from eva.bootstrap import Application
-from eva.domain.models import ActionRequest, AgentEvent, Speech, ToolUse, TurnCancelled
+from eva.domain.models import ActionRequest, AgentEvent, Speech, TextDelta, ToolUse, TurnCancelled
 
 YES = {"y", "yes", "s", "sim"}
 ALWAYS = {"a", "always", "sempre"}
@@ -177,18 +177,53 @@ def _preview(text: str) -> str:
 
 
 class ProgressView:
-    """Shows what Eva is doing and plays what she says, as it happens."""
+    """Shows what Eva is doing, writes her reply as it arrives, and plays what she says.
+
+    Reply text is printed line by line: the input line is redrawn on every write,
+    so partial lines would be torn apart.
+    """
 
     def __init__(self, player: SpeechPlayer) -> None:
         self.player = player
+        self.muted = False  # set while a heartbeat runs, so HEARTBEAT_OK never shows
+        self._line = ""
+        self._streamed = False
+        self._lock = threading.Lock()
 
     def __call__(self, event: AgentEvent) -> None:
-        match event:
-            case Speech(text, source):
-                print(f"\n{speaker_label(source)} (aloud)> {text}")
-                self.player.play(text)
-            case ToolUse(name, arguments, source):
-                print(f"  {'[' + source + '] ' if source else ''}· {summarize(name, arguments)}")
+        with self._lock:
+            match event:
+                case TextDelta(text):
+                    if not self.muted:
+                        self._write(text)
+                case Speech(text, source):
+                    self._flush()
+                    print(f"\n{speaker_label(source)} (aloud)> {text}")
+                    self.player.play(text)
+                case ToolUse(name, arguments, source):
+                    self._flush()
+                    print(f"  {'[' + source + '] ' if source else ''}· {summarize(name, arguments)}")
+
+    def end_turn(self) -> bool:
+        """Print what is left of the reply; True if any of it was already shown."""
+        with self._lock:
+            self._flush()
+            streamed, self._streamed = self._streamed, False
+            return streamed
+
+    def _write(self, text: str) -> None:
+        if not self._streamed:
+            print()
+            self._line = "Eva> "
+            self._streamed = True
+        *lines, self._line = (self._line + text).split("\n")
+        for line in lines:
+            print(line)
+
+    def _flush(self) -> None:
+        if self._line.strip() and self._line != "Eva> ":
+            print(self._line)
+        self._line = ""
 
 
 def speaker_label(source: str | None) -> str:
@@ -224,8 +259,10 @@ class Terminal:
         player: SpeechPlayer,
         heartbeat: timedelta | None,
         notifier: DesktopNotifier | None = None,
+        progress: ProgressView | None = None,
     ) -> None:
         self.notifier = notifier or DesktopNotifier()
+        self.progress = progress or ProgressView(player)
         self.app = app
         self.console = console
         self.transcriber = transcriber
@@ -318,20 +355,25 @@ class Terminal:
     def _take(self, turn: Turn) -> None:
         """Run one turn on the worker thread and print the outcome."""
         session = self.app.session
+        self.progress.muted = turn.kind is TurnKind.HEARTBEAT
         try:
             if turn.kind is TurnKind.HEARTBEAT:
                 reply = session.heartbeat(now())
             else:
                 reply = session.send(turn.message)
         except TurnCancelled:
+            self.progress.end_turn()
             print("(Stopped.)")
             return
         except Exception as exc:  # noqa: BLE001 - keep Eva alive on model errors
+            self.progress.end_turn()
             print(f"Eva error: {exc}")
             return
+        streamed = self.progress.end_turn()
         if reply is None:
             return
-        print(f"\nEva> {reply}")
+        if not streamed:
+            print(f"\nEva> {reply}")
         if session.denied_actions:
             print(f"[Declined: {', '.join(session.denied_actions)}]")
         if turn.kind is TurnKind.USER:

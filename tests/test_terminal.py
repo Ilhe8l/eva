@@ -2,7 +2,8 @@ import asyncio
 
 import pytest
 
-from eva.terminal import Console, Terminal, Turn, TurnKind, in_daemon_thread, summarize
+from eva.domain.models import TextDelta
+from eva.terminal import Console, ProgressView, Terminal, Turn, TurnKind, in_daemon_thread, summarize
 
 
 def test_worker_thread_questions_are_answered_by_the_next_line():
@@ -70,3 +71,21 @@ def test_enter_stops_a_recording_and_sends_the_transcript(tmp_path):
 
     turn = asyncio.run(scenario())
     assert turn == Turn(TurnKind.USER, "[voice] olá, eva")
+
+
+def test_reply_text_is_printed_line_by_line(capsys):
+    view = ProgressView(player=SilentPlayer())
+    for piece in ["Hello", " there.\nSecond", " line"]:
+        view(TextDelta(piece))
+    assert capsys.readouterr().out == "\nEva> Hello there.\n"
+    assert view.end_turn() is True
+    assert capsys.readouterr().out == "Second line\n"
+    assert view.end_turn() is False
+
+
+def test_muted_text_is_not_shown(capsys):
+    view = ProgressView(player=SilentPlayer())
+    view.muted = True
+    view(TextDelta("HEARTBEAT_OK"))
+    assert view.end_turn() is False
+    assert capsys.readouterr().out == ""

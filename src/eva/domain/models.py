@@ -42,7 +42,15 @@ class ToolUse:
     source: str | None = None
 
 
-AgentEvent = Speech | ToolUse
+@dataclass(frozen=True)
+class TextDelta:
+    """A piece of Eva's written reply, as the model generates it."""
+
+    text: str
+    source: str | None = None
+
+
+AgentEvent = Speech | ToolUse | TextDelta
 
 
 class TurnCancelled(Exception):

@@ -15,7 +15,7 @@ from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
 from eva.application.session import EvaSession
 from eva.application.tasks import TaskBoard
-from eva.domain.models import Speech, ToolUse, TurnCancelled
+from eva.domain.models import Speech, TextDelta, ToolUse, TurnCancelled
 
 
 class ScriptedModel(GenericFakeChatModel):
@@ -227,3 +227,13 @@ def test_messages_sent_after_the_last_step_are_kept_for_a_new_turn(make_agent):
     agent.ask("hi")
     agent.steer("one more thing")
     assert agent.take_unread() == ["one more thing"]
+
+
+def test_main_thread_streams_reply_text(make_agent):
+    make, _, _ = make_agent
+    events = []
+    make(AIMessage(content="Hello there, friend."), events=events)
+    streaming = make.adapter.thread("streamed", events.append, stream_text=True)
+    streaming.ask("hi")
+    text = "".join(event.text for event in events if isinstance(event, TextDelta))
+    assert text == "Hello there, friend."
