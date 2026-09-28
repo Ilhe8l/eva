@@ -1,73 +1,111 @@
 # Eva
 
 Eva is a personal assistant that lives on your computer, named after EVE (EVA
-in Brazil) from WALL-E. You talk to her in a terminal by text or voice. She
-works with your files and shell, keeps her own journal, and can extend her own
-abilities. Anything with side effects outside her journal waits for your
-approval.
+in Brazil) from WALL-E. You talk to her by voice or text. She works with your
+files and shell, keeps her own journal, runs long jobs in the background, and
+teaches herself new abilities. Anything with side effects asks you first.
 
-- **Reasoning:** [Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview) on LangGraph, with any LangChain chat model (Gemini, or a local model through LM Studio).
-- **Speech:** local speech-to-text with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and text-to-speech with [Kokoro](https://github.com/hexgrad/kokoro). Eva chooses what to say aloud; she never reads everything.
-- **Safety:** read-only commands run immediately. Other commands and file changes ask first; answer `a` to stop asking about that exact command for the session, or set `EVA_AUTONOMOUS=1` to never ask. See [docs/decisions.md](docs/decisions.md).
+She is built to run locally: the model is served by
+[LM Studio](https://lmstudio.ai) on your machine, speech recognition is
+[faster-whisper](https://github.com/SYSTRAN/faster-whisper), and her voice is
+[Kokoro](https://github.com/hexgrad/kokoro). Nothing has to leave your computer.
 
-Eva replies in English whatever language you write in.
+## What she does
+
+- **Talks.** Push-to-talk (`:record`) or hands-free (`:listen on`). She picks
+  what to say aloud (a greeting, the gist of an answer, a heads-up before slow
+  work) and leaves code and lists to the screen. You can talk over her.
+- **Works while you talk.** Long jobs go to background tasks, and she tells you
+  when they finish. A message sent mid-task reaches her at her next step, so
+  "actually, stop" works.
+- **Remembers.** She keeps a Markdown journal that she organizes herself, and
+  the conversation survives restarts.
+- **Grows.** When she lacks an ability, she writes a
+  [skill](https://docs.langchain.com/oss/python/deepagents/skills) for it. She
+  can also edit her own code: you approve each diff, and she restarts only if
+  the tests pass.
+- **Takes initiative.** After a quiet spell she checks her journal for pending
+  work, and she can schedule follow-ups for herself.
 
 ## Quick start
 
+You need Linux, Python 3.12, [uv](https://docs.astral.sh/uv/), and
+[LM Studio](https://lmstudio.ai) running its local server with a model that
+supports tool calling (Qwen3 works well).
+
 ```bash
-cp .env.example .env          # set EVA_MODEL and, for Gemini, GEMINI_API_KEY
-uv sync --extra voice --extra test
-uv run eva
+git clone https://github.com/Ilhe8l/eva.git && cd eva
+cp .env.example .env    # set EVA_MODEL to the model loaded in LM Studio
+uv sync --extra voice
+uv run eva --speak
 ```
 
-Models are named `provider:model`:
+Voice needs a microphone and speakers. A GPU with about 6 GB fits Whisper
+`large-v3-turbo` and Kokoro together; without one, both run on the CPU, more
+slowly. For a text-only install, use `uv sync` and skip `--speak`.
 
-| Model | `EVA_MODEL` |
+Eva answers in English whatever language you speak.
+
+### Models
+
+Models are named `provider:model`, and any LangChain chat model works:
+
+| Where | `EVA_MODEL` |
 | --- | --- |
-| Gemini | `google_genai:gemini-2.5-flash` |
-| LM Studio | `lmstudio:<loaded-model-id>` (server at `EVA_LM_STUDIO_URL`) |
+| LM Studio (local) | `lmstudio:<loaded-model-id>`, served at `EVA_LM_STUDIO_URL` |
+| Gemini (cloud) | `google_genai:gemini-3.8-flash`, with `GEMINI_API_KEY` |
+| Other providers | e.g. `openai:...` or `anthropic:...`, with that provider's LangChain package |
 
-For a text-only install, use `uv sync --extra test`. Voice needs `espeak-ng`, a
-microphone and speakers. It uses the GPU when one is available.
-
-## Terminal commands
+## Using Eva
 
 | Command | Action |
 | --- | --- |
 | any text | Talk to Eva |
-| `:record` | Talk; press Enter to stop. The transcript is shown and sent |
-| `:listen on` / `:listen off` | Hands-free: just talk, Eva notices when you stop (also `--listen`) |
-| `:speak on` / `:speak off` | Let Eva speak aloud |
+| `:record` | Talk, then press Enter; the transcript is shown and sent |
+| `:listen on` / `:listen off` | Hands-free: just talk, she notices when you stop (also `--listen`) |
+| `:speak on` / `:speak off` | Let her speak aloud |
 | `:shh` | Stop talking now |
-| `:stop` | Stop what Eva is doing, at the next step |
-| `:tasks` / `:cancel ID` | List / stop background tasks |
-| `:auto on` / `:auto off` | Let Eva act without asking / ask again |
+| `:stop` | Stop what she is doing, at the next step |
+| `:tasks` / `:cancel ID` | List or stop background tasks |
+| `:auto on` / `:auto off` | Let her act without asking, or ask again |
 | `:quit` | Exit and save a session summary |
 
-You can keep typing while Eva works: she reads your message at her next step,
-so you can redirect or stop her in plain words. For long jobs she starts background tasks, keeps talking with you
-while they run, and tells you when they finish. After `EVA_HEARTBEAT_MINUTES` of silence (default 30), she checks
-her journal and may act on her own. She can also schedule follow-ups for
-herself.
+## Safety
 
-## Growing Eva
+Read-only commands (`ls`, `cat`, `grep`, `git status`, ...) run right away.
+Other commands and file changes wait for your approval. Answer `a` to allow
+that exact command or file for the rest of the session. `EVA_AUTONOMOUS=1`
+turns approvals off; read [SECURITY.md](SECURITY.md) before using it.
 
-When Eva lacks an ability, she writes a
-[skill](https://docs.langchain.com/oss/python/deepagents/skills): a
-`SKILL.md` with instructions, plus optional `uv` scripts. Skills live in
-`.eva/skills/` and become available from the next message. To change her core
-behavior, she edits `src/eva/` and `tests/`. You approve each diff, and then
-`restart_eva` runs the tests and restarts her if they pass.
+## Configuration
 
-## Data
+Set these in `.env`:
 
-Everything Eva keeps lives in `.eva/`:
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `EVA_MODEL` | (required) | Chat model, `provider:model` |
+| `EVA_LM_STUDIO_URL` | `http://localhost:1234/v1` | LM Studio server |
+| `EVA_WHISPER_MODEL` | `large-v3-turbo` | Speech recognition model |
+| `EVA_VOICE` / `EVA_VOICE_LANGUAGE` | `af_heart` / `a` | [Kokoro voice](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md) |
+| `EVA_AUTONOMOUS` | off | Act without asking |
+| `EVA_HEARTBEAT_MINUTES` | `30` | Quiet time before she checks in (`0` disables) |
+| `EVA_DATA_DIR` | `.eva` | Where her journal, skills and history live |
+| `HF_TOKEN` | none | Faster model downloads |
 
-- `memory/`: her journal. `AGENTS.md` is loaded into every conversation, and
-  `sessions/` holds session summaries.
-- `skills/`: skills Eva wrote for you.
-- `checkpoints.sqlite`: the conversation, which survives restarts.
-- `follow_ups.json`: reminders Eva scheduled for herself.
+Everything Eva keeps lives in `.eva/`: her journal (`memory/`, with
+`AGENTS.md` loaded into every conversation), the skills she wrote (`skills/`),
+the conversation (`checkpoints.sqlite`) and her follow-ups
+(`follow_ups.json`).
+
+## How it works
+
+Eva is a [Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview)
+graph on LangGraph, wrapped in a small hexagonal core: the domain and the
+application layer know nothing about models, audio or the terminal. Approvals
+use LangChain's human-in-the-loop middleware, progress and speech are streamed,
+and each background task runs as its own thread on the same graph. See
+[docs/architecture.md](docs/architecture.md) and
+[docs/decisions.md](docs/decisions.md).
 
 ## Container
 
@@ -76,13 +114,21 @@ docker compose build
 docker compose run --rm eva
 ```
 
-In the container, shell commands run inside the container, with the repository
+Inside the container, shell commands run in the container, with the repository
 mounted at `/workspace`. Run Eva on the host when she needs the rest of your
-computer. Voice in a container requires audio device setup; the host is the
-supported path.
+computer, or for voice.
 
-## Docs
+## Development
 
-- [Architecture](docs/architecture.md)
-- [Decisions](docs/decisions.md)
-- [Roadmap](docs/roadmap.md)
+```bash
+uv sync --extra voice --extra test
+uv run pytest
+uv run ruff check . && uv run ruff format --check .
+```
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org);
+release-please turns them into versions and the changelog.
+
+## License
+
+[MIT](LICENSE)

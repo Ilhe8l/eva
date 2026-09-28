@@ -24,6 +24,6 @@ def build_chat_model(model: str, lm_studio_url: str) -> BaseChatModel:
         )
     if ":" not in model:
         raise ValueError(
-            f"Model {model!r} has no provider prefix; use e.g. google_genai:gemini-2.5-flash or lmstudio:<model-id>"
+            f"Model {model!r} has no provider prefix; use e.g. lmstudio:<model-id> or google_genai:gemini-3.8-flash"
         )
     return init_chat_model(model, temperature=0.3)

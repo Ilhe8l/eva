@@ -23,7 +23,7 @@ class Settings:
         selected = model or os.getenv("EVA_MODEL")
         if not selected:
             raise ValueError(
-                "Set EVA_MODEL or pass --model, e.g. google_genai:gemini-2.5-flash or lmstudio:<loaded-model-id>"
+                "Set EVA_MODEL or pass --model, e.g. lmstudio:<loaded-model-id> or google_genai:gemini-3.8-flash"
             )
         project_root = Path(os.getenv("EVA_PROJECT_ROOT", Path.cwd())).resolve()
         return cls(

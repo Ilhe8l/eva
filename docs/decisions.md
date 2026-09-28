@@ -213,8 +213,8 @@ likes, and reads those files on demand. Session summaries go to
 ## Models are named `provider:model`
 
 `init_chat_model` builds the model, so any LangChain provider works, e.g.
-`google_genai:gemini-2.5-flash`. The `lmstudio:<id>` prefix targets LM
-Studio's OpenAI-compatible server. The session summarizer uses the same model.
+`google_genai:gemini-3.8-flash`. The `lmstudio:<id>` prefix targets LM
+Studio's OpenAI-compatible server, the default for running everything locally. The session summarizer uses the same model.
 
 ## English only
 

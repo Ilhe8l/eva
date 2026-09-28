@@ -18,7 +18,7 @@ from eva.terminal import Console, ConsoleApproval, ProgressView, Terminal
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Eva, a personal assistant in your terminal")
-    parser.add_argument("--model", help="provider:model, e.g. google_genai:gemini-2.5-flash or lmstudio:<id>")
+    parser.add_argument("--model", help="provider:model, e.g. lmstudio:<id> or google_genai:gemini-3.8-flash")
     parser.add_argument("--speak", action="store_true", help="Start with speech output on")
     parser.add_argument("--listen", action="store_true", help="Start listening hands-free")
     parser.add_argument("--whisper-model", default=os.getenv("EVA_WHISPER_MODEL", "large-v3-turbo"))
