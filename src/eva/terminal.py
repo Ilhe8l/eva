@@ -13,11 +13,12 @@ import io
 import shutil
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum, auto
-from typing import Any
+from typing import Any, Protocol
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
@@ -43,7 +44,15 @@ from eva.application.messages import (
 )
 from eva.application.tasks import BackgroundTask
 from eva.bootstrap import Application
-from eva.domain.models import ActionRequest, AgentEvent, Speech, StepLimitReached, TextDelta, ToolUse, TurnCancelled
+from eva.domain.models import (
+    ActionRequest,
+    AgentEvent,
+    Speech,
+    StepLimitReached,
+    TextDelta,
+    ToolUse,
+    TurnCancelled,
+)
 
 YES = {"y", "yes", "s", "sim"}
 ALWAYS = {"a", "always", "sempre"}
@@ -91,8 +100,10 @@ async def in_daemon_thread(function: Callable[..., Any], *args: Any) -> Any:
 class Console:
     """The only reader of the keyboard. Worker threads ask questions through it."""
 
-    def __init__(self) -> None:
-        self._interactive = sys.stdin.isatty()
+    def __init__(self, keyboard: bool = True) -> None:
+        """`keyboard=False` is for subclasses that get their lines from elsewhere."""
+        self._keyboard = keyboard
+        self._interactive = keyboard and sys.stdin.isatty()
         self._session: PromptSession[str] | None = PromptSession() if self._interactive else None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._answer: asyncio.Future[str] | None = None
@@ -118,17 +129,18 @@ class Console:
         self._answer.set_result(line)
         return True
 
-    def ask(self, question: str, context: str = "") -> str:
+    def ask(self, question: str, context: str = "", action: ActionRequest | None = None) -> str:
         """Ask from a worker thread and block until the user answers.
 
-        `context` is printed right before the question, inside the same turn,
-        so parallel tasks never interleave their prompts.
+        `context` (or the `action` it describes) is shown right before the
+        question, inside the same turn, so parallel tasks never interleave
+        their prompts.
         """
         with self._asking:
             if self._closed or self._loop is None:
                 return ""
-            if context:
-                print(context)
+            if context or action:
+                self._show(context, action)
             try:
                 return asyncio.run_coroutine_threadsafe(self._ask(question), self._loop).result()
             except (RuntimeError, asyncio.CancelledError):
@@ -142,7 +154,7 @@ class Console:
         self._answer = asyncio.get_running_loop().create_future()
         self._question = question
         self._redraw()
-        if not self._interactive:
+        if self._keyboard and not self._interactive:
             print(question, end="", flush=True)
         try:
             return await self._answer
@@ -150,6 +162,9 @@ class Console:
             self._answer = None
             self._question = ""
             self._redraw()
+
+    def _show(self, context: str, action: ActionRequest | None) -> None:
+        print(context)
 
     def _redraw(self) -> None:
         if self._session is not None and self._session.app.is_running:
@@ -168,7 +183,7 @@ class ConsoleApproval:
         self.notifier.notify(
             f"{speaker_label(action.source)} needs your approval", summarize(action.name, action.arguments)
         )
-        answer = self.console.ask(question, context=f"{header}\n{describe(action)}").strip().lower()
+        answer = self.console.ask(question, context=f"{header}\n{describe(action)}", action=action).strip().lower()
         if answer in ALWAYS:
             self.policy.always_allow(action.name, action.arguments)
         return answer in YES | ALWAYS
@@ -201,8 +216,29 @@ def _preview(text: str) -> str:
     return "\n".join([*lines[:PREVIEW_LINES], f"... ({len(lines) - PREVIEW_LINES} more lines)"])
 
 
+class View(Protocol):
+    """What the terminal shows. Worker threads call it too, so it must be thread-safe."""
+
+    muted: bool
+
+    def __call__(self, event: AgentEvent) -> None: ...
+
+    def end_turn(self) -> bool: ...
+
+    def reply(self, text: str) -> None: ...
+
+    def notice(self, text: str, tone: str = "info") -> None: ...
+
+    def user_said(self, text: str, voice: bool = False) -> None: ...
+
+    def status(self, state: str) -> None:
+        """What Eva is doing: "idle", "thinking", "listening" or "loading"."""
+
+    def screen(self, terminal: "Terminal") -> AbstractAsyncContextManager[None]: ...
+
+
 class ProgressView:
-    """Shows what Eva is doing, renders her reply as it arrives, and plays what she says.
+    """The line-by-line view: what Eva is doing, her reply as it arrives, and what she says.
 
     The reply is Markdown, rendered one block (paragraph, list, code block) at a
     time: a block is printed once it is complete, because half-written Markdown
@@ -230,6 +266,24 @@ class ProgressView:
                 case ToolUse(name, arguments, source):
                     self._flush()
                     print(f"  {'[' + source + '] ' if source else ''}· {summarize(name, arguments)}")
+
+    def reply(self, text: str) -> None:
+        print(f"\n{render_markdown(text, 'Eva> ')}")
+
+    def notice(self, text: str, tone: str = "info") -> None:
+        print(text)
+
+    def user_said(self, text: str, voice: bool = False) -> None:
+        if voice:  # typed lines are already on screen
+            print(f"You (voice)> {text}")
+
+    def status(self, state: str) -> None:
+        pass
+
+    @asynccontextmanager
+    async def screen(self, terminal: "Terminal") -> AsyncIterator[None]:
+        with patch_stdout(raw=True):
+            yield
 
     def end_turn(self) -> bool:
         """Print what is left of the reply; True if any of it was already shown."""
@@ -317,10 +371,10 @@ class Terminal:
         player: SpeechPlayer,
         heartbeat: timedelta | None,
         notifier: DesktopNotifier | None = None,
-        progress: ProgressView | None = None,
+        view: "View | None" = None,
     ) -> None:
         self.notifier = notifier or DesktopNotifier()
-        self.progress = progress or ProgressView(player)
+        self.view = view or ProgressView(player)
         self.app = app
         self.console = console
         self.transcriber = transcriber
@@ -346,12 +400,12 @@ class Terminal:
         if listen:
             self._command(":listen on")
         self.app.tasks.on_finish = lambda task: loop.call_soon_threadsafe(self._task_finished, task)
-        print("Eva is ready. Type :help for commands.")
-        if self.app.policy.autonomous:
-            print(AUTONOMOUS_WARNING)
         if resumed:
             await self._turns.put(Turn(TurnKind.SYSTEM, RESUMED_MESSAGE))
-        with patch_stdout(raw=True):
+        async with self.view.screen(self):
+            self.view.notice("Eva is ready. Type :help for commands.")
+            if self.app.policy.autonomous:
+                self.view.notice(AUTONOMOUS_WARNING, tone="warning")
             tasks = [asyncio.create_task(job) for job in (self._read(), self._work(), self._tick())]
             await self._stop.wait()
             await self._finish_current_turn()
@@ -383,6 +437,7 @@ class Terminal:
             if line in {":quit", ":exit"}:
                 break
             self._last_activity = now()
+            self.view.user_said(line)
             if line.startswith(":"):
                 self._command(line)
             else:
@@ -392,12 +447,13 @@ class Terminal:
     async def _submit(self, message: str) -> None:
         if self._busy:
             self.app.session.steer(message)
-            print("(Eva will read this at her next step.)")
+            self.view.notice("(Eva will read this at her next step.)")
             return
         await self._turns.put(Turn(TurnKind.USER, message))
 
     def _task_finished(self, task: BackgroundTask) -> None:
-        print(f"\n[task {task.id} {task.status.value}: {task.title}]")
+        tone = "info" if task.status.value == "done" else "warning"
+        self.view.notice(f"[task {task.id} {task.status.value}: {task.title}]", tone=tone)
         self.notifier.notify(f"Eva: task {task.status.value}", task.title)
         report = task_report_message(task.id, task.title, task.status.value, task.report)
         self._turns.put_nowait(Turn(TurnKind.SYSTEM, report))
@@ -430,33 +486,41 @@ class Terminal:
     def _take(self, turn: Turn) -> None:
         """Run one turn on the worker thread and print the outcome."""
         session = self.app.session
-        self.progress.muted = turn.kind is TurnKind.HEARTBEAT
+        self.view.muted = turn.kind is TurnKind.HEARTBEAT
+        if not self.view.muted:
+            self.view.status("loading" if turn.message == RESUMED_MESSAGE else "thinking")
+        try:
+            self._answer(session, turn)
+        finally:
+            self.view.status("idle")
+
+    def _answer(self, session, turn: Turn) -> None:
         try:
             if turn.kind is TurnKind.HEARTBEAT:
                 reply = session.heartbeat(now())
             else:
                 reply = session.send(turn.message)
         except TurnCancelled:
-            self.progress.end_turn()
-            print("(Stopped.)")
+            self.view.end_turn()
+            self.view.notice("(Stopped.)")
             return
         except StepLimitReached:
-            self.progress.end_turn()
-            print("(Eva reached her step limit for this turn.)")
+            self.view.end_turn()
+            self.view.notice("(Eva reached her step limit for this turn.)", tone="warning")
             if turn.message != STEP_LIMIT_MESSAGE:  # ask for a summary once, never in a loop
                 self._loop.call_soon_threadsafe(self._turns.put_nowait, Turn(TurnKind.SYSTEM, STEP_LIMIT_MESSAGE))
             return
         except Exception as exc:  # noqa: BLE001 - keep Eva alive on model errors
-            self.progress.end_turn()
-            print(f"Eva error: {exc}")
+            self.view.end_turn()
+            self.view.notice(f"Eva error: {exc}", tone="error")
             return
-        streamed = self.progress.end_turn()
+        streamed = self.view.end_turn()
         if reply is None:
             return
         if not streamed:
-            print(f"\n{render_markdown(reply, 'Eva> ')}")
+            self.view.reply(reply)
         if session.denied_actions:
-            print(f"[Declined: {', '.join(session.denied_actions)}]")
+            self.view.notice(f"[Declined: {', '.join(session.denied_actions)}]", tone="warning")
         if turn.kind is TurnKind.USER:
             self.app.summarizer.record(turn.message, reply)
 
@@ -465,7 +529,7 @@ class Terminal:
         argument = argument.strip()
         needs_voice = name == ":record" or (name in {":listen", ":speak"} and argument == "on")
         if needs_voice and not voice_available():
-            print(VOICE_MISSING)
+            self.view.notice(VOICE_MISSING, tone="warning")
         elif name == ":record":
             self.player.stop()  # the user starts talking: Eva stops
             # Record in the background: the keyboard reader must stay free to see Enter.
@@ -474,31 +538,37 @@ class Terminal:
         elif name == ":listen" and argument in {"on", "off"}:
             if argument == "on":
                 self.listener.start()
-                print("Listening hands-free: just talk. `:listen off` to stop.")
+                self.view.notice("Listening hands-free: just talk. `:listen off` to stop.")
             else:
                 self.listener.stop()
-                print("Hands-free listening off.")
+                self.view.notice("Hands-free listening off.")
+            self.view.status("idle")
         elif name == ":shh":
             self.player.stop()
         elif name == ":stop":
             self.player.stop()
             self.app.session.cancel()
-            print("Stopping after the current step..." if self._busy else "Nothing to stop.")
+            self.view.notice("Stopping after the current step..." if self._busy else "Nothing to stop.")
         elif name == ":auto" and argument in {"on", "off"}:
             self.app.policy.autonomous = argument == "on"
-            print(AUTONOMOUS_WARNING if self.app.policy.autonomous else "Eva asks before acting again.")
+            if self.app.policy.autonomous:
+                self.view.notice(AUTONOMOUS_WARNING, tone="warning")
+            else:
+                self.view.notice("Eva asks before acting again.")
         elif name == ":tasks":
             tasks = self.app.tasks.all()
-            print("\n".join(f"  {task.id} [{task.status.value}] {task.title}" for task in tasks) or "No tasks.")
+            self.view.notice(
+                "\n".join(f"  {task.id} [{task.status.value}] {task.title}" for task in tasks) or "No tasks."
+            )
         elif name == ":cancel" and argument:
-            print("Cancelling..." if self.app.tasks.cancel(argument) else "No running task with that id.")
+            self.view.notice("Cancelling..." if self.app.tasks.cancel(argument) else "No running task with that id.")
         elif name == ":speak" and argument in {"on", "off"}:
             self.app.speech.enabled = argument == "on"
             if self.app.speech.enabled:
                 self.player.warm_up()
-            print(f"Speech {argument}.")
+            self.view.notice(f"Speech {argument}.")
         else:
-            print(HELP)
+            self.view.notice(HELP)
 
     async def _record(self) -> None:
         message = await in_daemon_thread(self._listen)
@@ -510,26 +580,30 @@ class Terminal:
         try:
             text = self.transcriber.transcribe(audio)
         except Exception as exc:  # noqa: BLE001 - keep listening after a failed transcription
-            print(f"Voice input unavailable: {exc}")
+            self.view.notice(f"Voice input unavailable: {exc}", tone="error")
             return
         if text:
-            print(f"You (voice)> {text}")
+            self.view.user_said(text, voice=True)
             asyncio.run_coroutine_threadsafe(self._submit(voice_message(text)), self._loop)
 
     def _listen(self) -> str | None:
         """Record until Enter, transcribe, and show the user what Eva will read."""
+        self.view.status("listening")
         try:
             path = self.microphone.record(until=lambda: self.console.ask("Listening... press Enter to stop. "))
-            print("Transcribing...")
+            self.view.status("thinking")
+            self.view.notice("Transcribing...")
             try:
                 text = self.transcriber.transcribe(path)
             finally:
                 path.unlink(missing_ok=True)
         except Exception as exc:  # noqa: BLE001 - audio devices and model downloads fail in many ways
-            print(f"Voice input unavailable: {exc}")
+            self.view.notice(f"Voice input unavailable: {exc}", tone="error")
             return None
+        finally:
+            self.view.status("idle")
         if not text:
-            print("(Nothing understood.)")
+            self.view.notice("(Nothing understood.)")
             return None
-        print(f"You (voice)> {text}")
+        self.view.user_said(text, voice=True)
         return voice_message(text)
