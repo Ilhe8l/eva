@@ -58,7 +58,15 @@ class FakeTranscriber:
         return "olá, eva"
 
 
-def test_enter_stops_a_recording_and_sends_the_transcript(tmp_path):
+def test_enter_stops_a_recording_and_sends_the_transcript(tmp_path, monkeypatch):
+    from eva import terminal as terminal_module
+
+    monkeypatch.setattr(terminal_module, "voice_available", lambda: True)  # fakes stand in for the voice extra
+
+    async def press_enter_when_asked(console):
+        while not console.answer(""):
+            await asyncio.sleep(0.01)
+
     async def scenario():
         console = Console()
         console.bind(asyncio.get_running_loop())
@@ -67,8 +75,7 @@ def test_enter_stops_a_recording_and_sends_the_transcript(tmp_path):
         )
         terminal.microphone = FakeMicrophone(tmp_path / "take.wav")
         terminal._command(":record")
-        while not console.answer(""):  # the user presses Enter
-            await asyncio.sleep(0.01)
+        await asyncio.wait_for(press_enter_when_asked(console), timeout=2)
         await asyncio.wait_for(terminal._recording, timeout=2)
         return terminal._turns.get_nowait()
 
