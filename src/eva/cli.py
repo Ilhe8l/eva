@@ -10,7 +10,7 @@ from datetime import timedelta
 
 from eva.adapters.notifier import DesktopNotifier
 from eva.adapters.policy import ApprovalPolicy
-from eva.adapters.voice import KokoroSpeaker, SpeechPlayer, WhisperTranscriber
+from eva.adapters.voice import VOICE_MISSING, KokoroSpeaker, SpeechPlayer, WhisperTranscriber, voice_available
 from eva.bootstrap import bootstrap
 from eva.config import Settings
 from eva.terminal import Console, ConsoleApproval, ProgressView, Terminal
@@ -45,6 +45,9 @@ def main() -> None:
     transcriber = WhisperTranscriber(args.whisper_model, args.whisper_compute_type, notify=print)
     if importlib.util.find_spec("faster_whisper"):
         threading.Thread(target=transcriber.warm_up, daemon=True).start()
+    if (args.speak or args.listen) and not voice_available():
+        print(VOICE_MISSING)
+        args.speak = args.listen = False
     if args.speak:
         player.warm_up()
     policy = ApprovalPolicy(autonomous=settings.autonomous)

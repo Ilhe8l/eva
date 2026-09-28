@@ -124,3 +124,18 @@ def test_hitting_the_step_limit_asks_eva_for_a_summary_once():
         return [terminal._turns.get_nowait() for _ in range(terminal._turns.qsize())]
 
     assert asyncio.run(scenario()) == [Turn(TurnKind.SYSTEM, STEP_LIMIT_MESSAGE)]
+
+
+def test_voice_commands_explain_how_to_install_voice(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from eva import terminal as terminal_module
+    from eva.adapters.voice import VOICE_MISSING, SpeechChannel
+
+    monkeypatch.setattr(terminal_module, "voice_available", lambda: False)
+    app = SimpleNamespace(speech=SpeechChannel())
+    terminal = Terminal(app=app, console=Console(), transcriber=None, player=SilentPlayer(), heartbeat=None)
+    for command in (":speak on", ":record", ":listen on"):
+        terminal._command(command)
+    assert capsys.readouterr().out.count(VOICE_MISSING) == 3
+    assert app.speech.enabled is False

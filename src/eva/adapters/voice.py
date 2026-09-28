@@ -24,9 +24,16 @@ MAX_SPOKEN_CHARACTERS = 1200
 KOKORO_REPO = "hexgrad/Kokoro-82M"
 KOKORO_SAMPLE_RATE = 24000
 MICROPHONE_SAMPLE_RATE = 16000
+VOICE_MODULES = ("numpy", "sounddevice", "faster_whisper", "kokoro")
+VOICE_MISSING = "Voice is not installed. Run `uv sync --extra voice`, then restart Eva."
 MAX_NO_SPEECH_PROB = 0.6
 ECHO_SECONDS = 0.5
 SPEECH_EVENT = "speech"
+
+
+def voice_available() -> bool:
+    """Whether the optional voice extra is installed."""
+    return all(importlib.util.find_spec(name) is not None for name in VOICE_MODULES)
 
 
 class SpeechChannel:

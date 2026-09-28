@@ -26,7 +26,14 @@ from rich.markdown import Markdown
 
 from eva.adapters.notifier import DesktopNotifier
 from eva.adapters.policy import ApprovalPolicy
-from eva.adapters.voice import HandsFreeListener, Microphone, SpeechPlayer, WhisperTranscriber
+from eva.adapters.voice import (
+    VOICE_MISSING,
+    HandsFreeListener,
+    Microphone,
+    SpeechPlayer,
+    WhisperTranscriber,
+    voice_available,
+)
 from eva.application.messages import (
     RESUMED_MESSAGE,
     STEP_LIMIT_MESSAGE,
@@ -444,7 +451,10 @@ class Terminal:
     def _command(self, line: str) -> None:
         name, _, argument = line.partition(" ")
         argument = argument.strip()
-        if name == ":record":
+        needs_voice = name == ":record" or (name in {":listen", ":speak"} and argument == "on")
+        if needs_voice and not voice_available():
+            print(VOICE_MISSING)
+        elif name == ":record":
             self.player.stop()  # the user starts talking: Eva stops
             # Record in the background: the keyboard reader must stay free to see Enter.
             if self._recording is None or self._recording.done():
