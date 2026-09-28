@@ -27,10 +27,11 @@ class AgentStep:
 
 @dataclass(frozen=True)
 class Speech:
-    """Words Eva chose to say aloud while working."""
+    """Words Eva chose to tell the user: aloud, or as a status line when speech is off."""
 
     text: str
     source: str | None = None
+    aloud: bool = True
 
 
 @dataclass(frozen=True)

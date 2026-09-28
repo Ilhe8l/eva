@@ -1,15 +1,18 @@
 from eva.adapters.voice import MAX_SPOKEN_CHARACTERS, SPEECH_EVENT, SpeechChannel
 
 
-def test_only_chosen_text_is_spoken_while_enabled():
+def test_updates_are_spoken_with_speech_on_and_shown_with_it_off():
     emitted = []
     speech = SpeechChannel()
-    assert "off" in speech.say("Not now", emitted.append)
+    assert "status line" in speech.say("Checking the logs.", emitted.append)
     speech.enabled = True
     speech.say("  Hello there.  ", emitted.append)
     speech.say("x" * (MAX_SPOKEN_CHARACTERS + 1), emitted.append)
     speech.say("   ", emitted.append)
-    assert emitted == [{"type": SPEECH_EVENT, "text": "Hello there."}]
+    assert emitted == [
+        {"type": SPEECH_EVENT, "text": "Checking the logs.", "aloud": False},
+        {"type": SPEECH_EVENT, "text": "Hello there.", "aloud": True},
+    ]
 
 
 def test_stopping_the_player_drops_queued_sentences():

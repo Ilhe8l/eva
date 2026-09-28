@@ -3,6 +3,24 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## Eva keeps the user posted on long work
+
+On anything longer than a couple of steps, Eva reports like an operations
+assistant: what she is about to do, milestones with concrete facts, problems as
+soon as they appear, and the result. `SpeechModeMiddleware` decides when an
+update is due:
+
+- **Kickoff:** the first tool step of a turn prompts a one-sentence plan.
+- **Progress:** after 20 s or 6 tool steps without an update (60 s or 10 steps
+  in background tasks, which run beside the conversation), it asks for news.
+  It asks for concrete facts, never a bare "still working".
+
+The reminder is sent as a trailing message in that one request, not appended to
+the system prompt: models heed the latest message far more, and in testing a
+system-prompt note was ignored while the trailing one was followed. It is never
+saved to the thread. With speech off, `speak_to_user` shows the update as a
+status line, so text sessions are narrated too.
+
 ## Running out of steps ends a turn with a report
 
 A LangGraph run stops after `recursion_limit` graph steps, and one tool call

@@ -222,10 +222,11 @@ class ProgressView:
                 case TextDelta(text):
                     if not self.muted:
                         self._write(text)
-                case Speech(text, source):
+                case Speech(text, source, aloud):
                     self._flush()
-                    print(f"\n{speaker_label(source)} (aloud)> {text}")
-                    self.player.play(text)
+                    print(f"\n{speaker_label(source)} ({'aloud' if aloud else 'update'})> {text}")
+                    if aloud:
+                        self.player.play(text)
                 case ToolUse(name, arguments, source):
                     self._flush()
                     print(f"  {'[' + source + '] ' if source else ''}· {summarize(name, arguments)}")
@@ -353,12 +354,23 @@ class Terminal:
         with patch_stdout(raw=True):
             tasks = [asyncio.create_task(job) for job in (self._read(), self._work(), self._tick())]
             await self._stop.wait()
+            await self._finish_current_turn()
             self.app.tasks.on_finish = lambda task: None  # the loop is about to close
             self.listener.stop()
             self.console.close()
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _finish_current_turn(self, timeout: float = 10) -> None:
+        """Cancel the turn in progress and give it a moment to stop before Eva exits."""
+        if not self._busy:
+            return
+        self.app.session.cancel()
+        for _ in range(int(timeout / 0.1)):
+            if not self._busy:
+                return
+            await asyncio.sleep(0.1)
 
     async def _read(self) -> None:
         while True:

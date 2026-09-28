@@ -235,7 +235,7 @@ def _events(chunk: dict) -> list[AgentEvent]:
         return [TextDelta(text)] if text else []
     if chunk["type"] == "custom":
         is_speech = isinstance(data, dict) and data.get("type") == SPEECH_EVENT
-        return [Speech(data["text"])] if is_speech else []
+        return [Speech(data["text"], aloud=data.get("aloud", True))] if is_speech else []
     events: list[AgentEvent] = []
     for update in data.values():
         messages = update.get("messages", []) if isinstance(update, dict) else []

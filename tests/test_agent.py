@@ -9,7 +9,7 @@ from eva.adapters.agent import DeepAgentAdapter, Workspace
 from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.policy import ApprovalPolicy
-from eva.adapters.speech_mode import PROGRESS_NUDGE, SPEECH_OFF, SPEECH_ON, SpeechModeMiddleware
+from eva.adapters.speech_mode import KICKOFF_NUDGE, SPEECH_OFF, SPEECH_ON, SpeechModeMiddleware
 from eva.adapters.steering import STEERING_PREFIX
 from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
@@ -19,13 +19,13 @@ from eva.domain.models import Speech, StepLimitReached, TextDelta, ToolUse, Turn
 
 
 class ScriptedModel(GenericFakeChatModel):
-    prompts: list = []  # system prompt of every call
+    prompts: list = []  # everything the model saw, per call
 
     def bind_tools(self, tools, **kwargs):
         return self
 
     def _generate(self, messages, *args, **kwargs):
-        self.prompts.append(messages[0].text)
+        self.prompts.append("\n".join(message.text for message in messages))
         return super()._generate(messages, *args, **kwargs)
 
 
@@ -148,7 +148,7 @@ def test_model_is_told_whether_speech_is_on(make_agent):
     assert SPEECH_ON in second
 
 
-def test_silent_work_triggers_a_spoken_progress_nudge(make_agent):
+def test_tool_work_starts_with_a_kickoff_nudge(make_agent):
     make, _, _ = make_agent
     speech = SpeechChannel()
     speech.enabled = True
@@ -159,7 +159,7 @@ def test_silent_work_triggers_a_spoken_progress_nudge(make_agent):
     agent = make(*calls, speech=speech)
     agent.ask("dig around")
     prompts = make.models[-1].prompts
-    assert [PROGRESS_NUDGE in prompt for prompt in prompts] == [False, False, False, True, True]
+    assert [KICKOFF_NUDGE in prompt for prompt in prompts] == [False, True, False, False, False]
 
 
 def test_stop_cancels_the_turn_at_the_next_step(make_agent):
@@ -254,3 +254,12 @@ def test_running_out_of_steps_stops_the_turn_cleanly(make_agent):
     agent = make(*calls, max_steps=12)
     with pytest.raises(StepLimitReached):
         agent.ask("explore everything")
+
+
+def test_update_reminders_are_never_saved_to_the_thread(make_agent):
+    make, _, _ = make_agent
+    agent = make(_call("execute", command="ls"))
+    agent.ask("look around")
+    assert KICKOFF_NUDGE in make.models[-1].prompts[1]
+    saved = [message.text for message in agent._graph.get_state(agent.config).values["messages"]]
+    assert not any("[reminder]" in text for text in saved)

@@ -30,6 +30,8 @@ She is named after EVE (EVA in Brazil) from WALL-E.
 
 - **Talks like a person.** Push-to-talk or hands-free. She chooses what to say
   aloud and leaves code and lists on screen. You can talk over her.
+- **Keeps you posted.** On longer work she says what she is about to do, reports
+  milestones with real numbers, and flags problems as they come up.
 - **Works while you talk.** Long jobs run as background tasks, and a message sent
   mid-task reaches her at her next step, so "actually, stop" works.
 - **Remembers.** A Markdown journal she organizes herself, and a conversation

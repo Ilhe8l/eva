@@ -146,3 +146,22 @@ def test_voice_commands_explain_how_to_install_voice(monkeypatch, capsys):
         terminal._command(command)
     assert capsys.readouterr().out.count(VOICE_MISSING) == 3
     assert app.speech.enabled is False
+
+
+def test_updates_with_speech_off_are_shown_but_not_played(capsys):
+    from eva.domain.models import Speech
+
+    class RecordingPlayer(SilentPlayer):
+        played = []
+
+        def play(self, text):
+            self.played.append(text)
+
+    player = RecordingPlayer()
+    view = ProgressView(player=player)
+    view(Speech("Scanned 1,200 files so far.", aloud=False))
+    view(Speech("All done.", aloud=True))
+    out = capsys.readouterr().out
+    assert "Eva (update)> Scanned 1,200 files so far." in out
+    assert "Eva (aloud)> All done." in out
+    assert player.played == ["All done."]

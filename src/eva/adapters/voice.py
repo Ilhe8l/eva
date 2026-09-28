@@ -37,21 +37,22 @@ def voice_available() -> bool:
 
 
 class SpeechChannel:
-    """Carries the exact sentences Eva chose to say aloud to the stream."""
+    """Carries what Eva chose to tell the user to the stream.
+
+    With speech on it is said aloud; with speech off it is shown as a status line.
+    """
 
     def __init__(self) -> None:
         self.enabled = False
 
     def say(self, text: str, emit: Callable[[dict], None]) -> str:
-        if not self.enabled:
-            return "Speech is off; the user reads your text reply instead."
         spoken = text.strip()
         if not spoken:
-            return "Nothing was spoken because the text was empty."
+            return "Nothing was said because the text was empty."
         if len(spoken) > MAX_SPOKEN_CHARACTERS:
-            return f"Not spoken: keep speech under {MAX_SPOKEN_CHARACTERS} characters."
-        emit({"type": SPEECH_EVENT, "text": spoken})
-        return "Spoken to the user."
+            return f"Not said: keep it under {MAX_SPOKEN_CHARACTERS} characters."
+        emit({"type": SPEECH_EVENT, "text": spoken, "aloud": self.enabled})
+        return "Spoken to the user." if self.enabled else "Shown to the user as a status line (speech is off)."
 
 
 class Microphone:

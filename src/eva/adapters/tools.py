@@ -19,9 +19,9 @@ def build_tools(
 ) -> list[BaseTool]:
     @tool
     def speak_to_user(text: str) -> str:
-        """Say `text` aloud to the user right now, even mid-task. Speak naturally, as a person
-        would: a whole conversational answer, a spoken summary of technical results, or a
-        short progress update. Never code, paths or raw lists."""
+        """Tell the user `text` right now, even mid-task: aloud when speech is on, as a status
+        line otherwise. Use it for a conversational answer, a spoken summary of technical
+        results, or a short progress update. Never code, paths or raw lists."""
         return speech.say(text, get_stream_writer())
 
     @tool
