@@ -8,7 +8,7 @@ approval.
 
 - **Reasoning:** [Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview) on LangGraph, with any LangChain chat model (Gemini, or a local model through LM Studio).
 - **Speech:** local speech-to-text with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and text-to-speech with [Kokoro](https://github.com/hexgrad/kokoro). Eva chooses what to say aloud; she never reads everything.
-- **Safety:** read-only commands run immediately. Other commands and file changes ask first. See [docs/decisions.md](docs/decisions.md).
+- **Safety:** read-only commands run immediately. Other commands and file changes ask first; answer `a` to stop asking about that exact command for the session, or set `EVA_AUTONOMOUS=1` to never ask. See [docs/decisions.md](docs/decisions.md).
 
 Eva replies in English whatever language you write in.
 
@@ -40,6 +40,7 @@ microphone and speakers. It uses the GPU when one is available.
 | `:shh` | Stop talking now |
 | `:stop` | Stop what Eva is doing, at the next step |
 | `:tasks` / `:cancel ID` | List / stop background tasks |
+| `:auto on` / `:auto off` | Let Eva act without asking / ask again |
 | `:quit` | Exit and save a session summary |
 
 You can keep typing while Eva works; your message reaches her after her

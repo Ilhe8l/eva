@@ -8,6 +8,7 @@ import sys
 import threading
 from datetime import timedelta
 
+from eva.adapters.policy import ApprovalPolicy
 from eva.adapters.voice import KokoroSpeaker, SpeechPlayer, WhisperTranscriber
 from eva.bootstrap import bootstrap
 from eva.config import Settings
@@ -39,7 +40,8 @@ def main() -> None:
         threading.Thread(target=transcriber.warm_up, daemon=True).start()
     if args.speak:
         player.warm_up()
-    with bootstrap(settings, ConsoleApproval(console), ProgressView(player)) as app:
+    policy = ApprovalPolicy(autonomous=settings.autonomous)
+    with bootstrap(settings, policy, ConsoleApproval(console, policy), ProgressView(player)) as app:
         app.speech.enabled = args.speak
         terminal = Terminal(app, console, transcriber, player, heartbeat)
         asyncio.run(terminal.run(resumed=args.resumed))

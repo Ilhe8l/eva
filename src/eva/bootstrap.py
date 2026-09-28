@@ -13,7 +13,7 @@ from eva.adapters.agent import DeepAgentAdapter, Workspace
 from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.models import build_chat_model
-from eva.adapters.policy import approval_rules
+from eva.adapters.policy import ApprovalPolicy
 from eva.adapters.speech_mode import SpeechModeMiddleware
 from eva.adapters.summarizer import SessionSummarizer
 from eva.adapters.tools import build_tools
@@ -32,12 +32,14 @@ class Application:
     updater: SelfUpdater
     follow_ups: FollowUpStore
     tasks: TaskBoard
+    policy: ApprovalPolicy
     summarizer: SessionSummarizer
 
 
 @contextmanager
 def bootstrap(
     settings: Settings,
+    policy: ApprovalPolicy,
     approval: ApprovalPort,
     on_event: Callable[[AgentEvent], None],
 ) -> Iterator[Application]:
@@ -59,7 +61,7 @@ def bootstrap(
             workspace=workspace,
             checkpointer=checkpointer,
             tools=build_tools(speech, updater, follow_ups, tasks),
-            interrupt_on=approval_rules(),
+            interrupt_on=policy.interrupt_on(),
             middleware=[SpeechModeMiddleware(speech)],
         )
         app = Application(
@@ -68,6 +70,7 @@ def bootstrap(
             updater=updater,
             follow_ups=follow_ups,
             tasks=tasks,
+            policy=policy,
             summarizer=SessionSummarizer(model, workspace.memory_dir / "sessions"),
         )
         try:

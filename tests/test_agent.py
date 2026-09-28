@@ -8,7 +8,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from eva.adapters.agent import DeepAgentAdapter, Workspace
 from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
-from eva.adapters.policy import approval_rules
+from eva.adapters.policy import ApprovalPolicy
 from eva.adapters.speech_mode import PROGRESS_NUDGE, SPEECH_OFF, SPEECH_ON, SpeechModeMiddleware
 from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
@@ -38,7 +38,7 @@ def make_agent(tmp_path):
     project.mkdir()
     (project / "notes.txt").write_text("keep me\n")
 
-    def make(*messages, events=None, speech=None):
+    def make(*messages, events=None, speech=None, policy=None):
         model = ScriptedModel(messages=iter([*messages, AIMessage(content="All done.")]), prompts=[])
         make.models.append(model)
         speech = speech or SpeechChannel()
@@ -49,7 +49,7 @@ def make_agent(tmp_path):
             Workspace(project, tmp_path / "data"),
             InMemorySaver(),
             tools=build_tools(speech, SelfUpdater(project), FollowUpStore(tmp_path / "f.json"), tasks),
-            interrupt_on=approval_rules(),
+            interrupt_on=(policy or ApprovalPolicy()).interrupt_on(),
             middleware=[SpeechModeMiddleware(speech)],
         )
         make.tasks = tasks
@@ -182,3 +182,18 @@ def test_threads_share_the_graph_but_not_the_history(make_agent):
 
     assert contents(main) == ["hello main", "Main."]
     assert contents(task) == ["hello task", "Task."]
+
+
+def test_autonomous_mode_and_always_allow_skip_approval(make_agent):
+    make, project, _ = make_agent
+    policy = ApprovalPolicy(autonomous=True)
+    step = make(_call("execute", command="rm notes.txt"), policy=policy).ask("delete my notes")
+    assert step.pending_actions == ()
+    assert not (project / "notes.txt").exists()
+
+    policy = ApprovalPolicy()
+    policy.always_allow("write_file", {"file_path": "/a.txt"})
+    step = make(_call("write_file", file_path="/a.txt", content="x"), policy=policy).ask("write a")
+    assert step.pending_actions == ()
+    step = make(_call("write_file", file_path="/b.txt", content="x"), policy=policy).ask("write b")
+    assert [action.name for action in step.pending_actions] == ["write_file"]

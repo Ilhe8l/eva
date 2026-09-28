@@ -16,7 +16,6 @@ from collections.abc import Callable
 from pathlib import PurePosixPath
 
 from langchain.agents.middleware import InterruptOnConfig
-from langchain.tools.tool_node import ToolCallRequest
 
 MEMORY_ROUTE = "/memories/"
 SKILLS_ROUTE = "/skills/"
@@ -122,21 +121,47 @@ def needs_write_approval(path: str) -> bool:
     return not normalized.startswith(FREE_WRITE_PREFIXES)
 
 
-def _path_arg(request: ToolCallRequest) -> str:
-    return str(request.tool_call["args"].get("file_path", ""))
+class ApprovalPolicy:
+    """Decides which tool calls pause for the user; the user can widen it live.
 
+    In autonomous mode nothing pauses. Otherwise read-only commands and journal
+    writes run freely, anything the user chose to "always allow" this session
+    runs freely, and everything else pauses.
+    """
 
-def _approval(when: Callable[[ToolCallRequest], bool]) -> InterruptOnConfig:
-    return InterruptOnConfig(allowed_decisions=["approve", "reject"], when=when)
-
-
-def approval_rules() -> dict[str, InterruptOnConfig]:
-    """Build the `interrupt_on` mapping for `create_deep_agent`."""
-    write_rule = _approval(lambda request: needs_write_approval(_path_arg(request)))
-    return {
-        "execute": _approval(lambda request: not is_safe_command(str(request.tool_call["args"].get("command", "")))),
-        "read_file": _approval(lambda request: is_sensitive_path(_path_arg(request))),
-        "write_file": write_rule,
-        "edit_file": write_rule,
-        "delete": write_rule,
+    RULES: dict[str, Callable[[dict], bool]] = {
+        "execute": lambda args: not is_safe_command(str(args.get("command", ""))),
+        "read_file": lambda args: is_sensitive_path(str(args.get("file_path", ""))),
+        "write_file": lambda args: needs_write_approval(str(args.get("file_path", ""))),
+        "edit_file": lambda args: needs_write_approval(str(args.get("file_path", ""))),
+        "delete": lambda args: needs_write_approval(str(args.get("file_path", ""))),
     }
+
+    def __init__(self, autonomous: bool = False) -> None:
+        self.autonomous = autonomous
+        self._always: set[tuple[str, str]] = set()
+
+    def needs_approval(self, tool: str, args: dict) -> bool:
+        if self.autonomous or (tool, subject(tool, args)) in self._always:
+            return False
+        rule = self.RULES.get(tool)
+        return rule is not None and rule(args)
+
+    def always_allow(self, tool: str, args: dict) -> None:
+        """Stop asking about this exact command or file for the rest of the session."""
+        self._always.add((tool, subject(tool, args)))
+
+    def interrupt_on(self) -> dict[str, InterruptOnConfig]:
+        """The `interrupt_on` mapping for `create_deep_agent`."""
+        return {tool: self._rule(tool) for tool in self.RULES}
+
+    def _rule(self, tool: str) -> InterruptOnConfig:
+        return InterruptOnConfig(
+            allowed_decisions=["approve", "reject"],
+            when=lambda request: self.needs_approval(tool, request.tool_call["args"]),
+        )
+
+
+def subject(tool: str, args: dict) -> str:
+    """What an approval is about: the exact command, or the file."""
+    return str(args.get("command") if tool == "execute" else args.get("file_path", ""))

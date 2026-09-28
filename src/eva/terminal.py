@@ -20,6 +20,7 @@ from typing import Any
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
+from eva.adapters.policy import ApprovalPolicy
 from eva.adapters.voice import Microphone, SpeechPlayer, WhisperTranscriber
 from eva.application.messages import RESUMED_MESSAGE, follow_up_message, task_report_message, voice_message
 from eva.application.tasks import BackgroundTask
@@ -27,10 +28,12 @@ from eva.bootstrap import Application
 from eva.domain.models import ActionRequest, AgentEvent, Speech, ToolUse, TurnCancelled
 
 YES = {"y", "yes", "s", "sim"}
+ALWAYS = {"a", "always", "sempre"}
 HELP = (
     "Commands: :record (talk, then Enter), :speak on|off, :shh (stop talking), "
-    ":stop (stop working), :tasks, :cancel ID, :quit"
+    ":stop (stop working), :tasks, :cancel ID, :auto on|off, :quit"
 )
+AUTONOMOUS_WARNING = "Autonomous mode: Eva runs commands and edits files without asking. `:auto off` to stop."
 PREVIEW_LINES = 40
 SUMMARY_WIDTH = 100
 TICK_SECONDS = 15
@@ -130,12 +133,17 @@ class Console:
 
 
 class ConsoleApproval:
-    def __init__(self, console: Console) -> None:
+    def __init__(self, console: Console, policy: ApprovalPolicy) -> None:
         self.console = console
+        self.policy = policy
 
     def approve(self, action: ActionRequest) -> bool:
         header = f"\n── {speaker_label(action.source)} wants to run {action.name} ──"
-        return self.console.ask("Approve? [y/N] ", context=f"{header}\n{describe(action)}").strip().lower() in YES
+        question = "Approve? [y]es / [N]o / [a]lways this session: "
+        answer = self.console.ask(question, context=f"{header}\n{describe(action)}").strip().lower()
+        if answer in ALWAYS:
+            self.policy.always_allow(action.name, action.arguments)
+        return answer in YES | ALWAYS
 
 
 def describe(action: ActionRequest) -> str:
@@ -234,6 +242,8 @@ class Terminal:
         self.console.bind(loop)
         self.app.tasks.on_finish = lambda task: loop.call_soon_threadsafe(self._task_finished, task)
         print(f"Eva is ready. {HELP}")
+        if self.app.policy.autonomous:
+            print(AUTONOMOUS_WARNING)
         if resumed:
             await self._turns.put(Turn(TurnKind.SYSTEM, RESUMED_MESSAGE))
         with patch_stdout(raw=True):
@@ -331,6 +341,9 @@ class Terminal:
             self.player.stop()
             self.app.session.cancel()
             print("Stopping after the current step..." if self._busy else "Nothing to stop.")
+        elif name == ":auto" and argument in {"on", "off"}:
+            self.app.policy.autonomous = argument == "on"
+            print(AUTONOMOUS_WARNING if self.app.policy.autonomous else "Eva asks before acting again.")
         elif name == ":tasks":
             tasks = self.app.tasks.all()
             print("\n".join(f"  {task.id} [{task.status.value}] {task.title}" for task in tasks) or "No tasks.")

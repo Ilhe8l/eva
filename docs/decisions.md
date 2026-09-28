@@ -3,6 +3,20 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## Autonomous mode and "always allow"
+
+`ApprovalPolicy` holds the approval rules and state that can change during a
+session. The `when` predicates read it on every call, so changes apply
+immediately without rebuilding the graph.
+
+- `EVA_AUTONOMOUS=1`, or `:auto on` at runtime, turns every approval off. Eva
+  runs commands and edits files, her own source included, without asking. The
+  terminal shows a warning while it is on. Secrets are still stripped from the
+  shell environment.
+- At an approval prompt, `a` approves and stops asking about that exact
+  command or file for the rest of the session. It is not persisted, so each
+  session starts cautious.
+
 ## Background tasks, interruptions and fuller speech
 
 - **Background tasks:** `start_background_task` hands long work to another
