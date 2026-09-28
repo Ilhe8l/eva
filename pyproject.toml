@@ -3,11 +3,22 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "eva-local"
+name = "eva"
 version = "0.1.0"
-description = "Personal voice assistant with reviewed computer access and self-extension"
+description = "A personal voice assistant that lives on your computer, built on local AI"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Guilherme Souza" }]
 requires-python = ">=3.12"
+keywords = ["assistant", "voice", "agent", "local-ai", "langgraph", "deepagents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
 dependencies = [
     "deepagents>=0.7.19,<1",
     "langchain>=1.4,<2",
@@ -18,6 +29,10 @@ dependencies = [
     "prompt-toolkit>=3.0.50,<4",
     "python-dotenv>=1.2",
 ]
+
+[project.urls]
+Repository = "https://github.com/Ilhe8l/eva"
+Issues = "https://github.com/Ilhe8l/eva/issues"
 
 [project.optional-dependencies]
 voice = [
