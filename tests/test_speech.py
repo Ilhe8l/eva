@@ -10,8 +10,8 @@ def test_updates_are_spoken_with_speech_on_and_shown_with_it_off():
     speech.say("x" * (MAX_SPOKEN_CHARACTERS + 1), emitted.append)
     speech.say("   ", emitted.append)
     assert emitted == [
-        {"type": SPEECH_EVENT, "text": "Checking the logs.", "aloud": False},
-        {"type": SPEECH_EVENT, "text": "Hello there.", "aloud": True},
+        {"type": SPEECH_EVENT, "text": "Checking the logs.", "aloud": False, "mood": None},
+        {"type": SPEECH_EVENT, "text": "Hello there.", "aloud": True, "mood": None},
     ]
 
 

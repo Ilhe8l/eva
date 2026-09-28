@@ -7,6 +7,21 @@ conversation.
 from dataclasses import dataclass
 from typing import Any
 
+MOODS = (
+    "happy",
+    "amused",
+    "proud",
+    "sad",
+    "worried",
+    "surprised",
+    "curious",
+    "confused",
+    "thinking",
+    "focused",
+    "sleepy",
+    "wink",
+)
+
 
 @dataclass(frozen=True)
 class ActionRequest:
@@ -32,6 +47,7 @@ class Speech:
     text: str
     source: str | None = None
     aloud: bool = True
+    mood: str | None = None
 
 
 @dataclass(frozen=True)
@@ -40,6 +56,26 @@ class ToolUse:
 
     name: str
     arguments: dict[str, Any]
+    source: str | None = None
+    call_id: str = ""
+
+
+@dataclass(frozen=True)
+class ToolResult:
+    """How a tool call ended: `summary` is the first line of its output."""
+
+    name: str
+    ok: bool
+    summary: str = ""
+    source: str | None = None
+    call_id: str = ""
+
+
+@dataclass(frozen=True)
+class Reaction:
+    """An expression Eva chose to show on her face for a moment (one of MOODS)."""
+
+    mood: str
     source: str | None = None
 
 
@@ -51,7 +87,7 @@ class TextDelta:
     source: str | None = None
 
 
-AgentEvent = Speech | ToolUse | TextDelta
+AgentEvent = Speech | ToolUse | ToolResult | TextDelta | Reaction
 
 
 class TurnCancelled(Exception):

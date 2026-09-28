@@ -15,7 +15,7 @@ from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
 from eva.application.session import EvaSession
 from eva.application.tasks import TaskBoard
-from eva.domain.models import Speech, StepLimitReached, TextDelta, ToolUse, TurnCancelled
+from eva.domain.models import Reaction, Speech, StepLimitReached, TextDelta, ToolUse, TurnCancelled
 
 
 class ScriptedModel(GenericFakeChatModel):
@@ -99,8 +99,19 @@ def test_speech_and_tool_use_stream_before_the_reply(make_agent):
         _call("speak_to_user", text="Checking now."), _call("execute", command="ls"), events=events, speech=speech
     )
     step = agent.ask("look around")
-    assert events == [Speech("Checking now."), ToolUse("execute", {"command": "ls"})]
+    speech_event, tool_use, result = events
+    assert speech_event == Speech("Checking now.")
+    assert tool_use == ToolUse("execute", {"command": "ls"}, call_id="call-execute")
+    assert (result.name, result.ok, result.call_id) == ("execute", True, "call-execute")
+    assert "notes.txt" in result.summary
     assert step.reply == "All done."
+
+
+def test_expressions_reach_the_face_without_showing_as_tool_use(make_agent):
+    make, _, _ = make_agent
+    events = []
+    make(_call("show_expression", mood="happy"), events=events).ask("it works!")
+    assert events == [Reaction("happy")]
 
 
 def _skill_names(agent):

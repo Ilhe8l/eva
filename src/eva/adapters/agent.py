@@ -16,21 +16,24 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from langchain.agents.middleware import AgentMiddleware, InterruptOnConfig
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, RemoveMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, RemoveMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Checkpointer, Command
 
 from eva.adapters.policy import BUILTIN_SKILLS_ROUTE, MEMORY_ROUTE, SKILLS_ROUTE
 from eva.adapters.steering import SteeringInbox, SteeringMiddleware
+from eva.adapters.tools import REACTION_EVENT
 from eva.adapters.voice import SPEECH_EVENT
 from eva.domain.models import (
     ActionRequest,
     AgentEvent,
     AgentStep,
+    Reaction,
     Speech,
     StepLimitReached,
     TextDelta,
+    ToolResult,
     ToolUse,
     TurnCancelled,
 )
@@ -39,7 +42,8 @@ from eva.prompts import build_system_prompt
 BUILTIN_SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
 MEMORY_INDEX = f"{MEMORY_ROUTE}AGENTS.md"
 SHELL_TIMEOUT_SECONDS = 120
-SILENT_TOOLS = {"speak_to_user"}
+SILENT_TOOLS = {"speak_to_user", "show_expression"}
+RESULT_SUMMARY_WIDTH = 160
 DEFAULT_MAX_STEPS = 500  # graph steps per turn; one tool call takes a few
 _SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
 
@@ -234,19 +238,31 @@ def _events(chunk: dict) -> list[AgentEvent]:
         text = message.text if isinstance(message, AIMessageChunk) and is_reply else ""
         return [TextDelta(text)] if text else []
     if chunk["type"] == "custom":
-        is_speech = isinstance(data, dict) and data.get("type") == SPEECH_EVENT
-        return [Speech(data["text"], aloud=data.get("aloud", True))] if is_speech else []
+        kind = data.get("type") if isinstance(data, dict) else None
+        if kind == SPEECH_EVENT:
+            return [Speech(data["text"], aloud=data.get("aloud", True), mood=data.get("mood"))]
+        return [Reaction(data["mood"])] if kind == REACTION_EVENT else []
     events: list[AgentEvent] = []
     for update in data.values():
         messages = update.get("messages", []) if isinstance(update, dict) else []
         for message in messages if isinstance(messages, list) else []:
             if isinstance(message, AIMessage):
                 events.extend(
-                    ToolUse(call["name"], call["args"])
+                    ToolUse(call["name"], call["args"], call_id=call.get("id") or "")
                     for call in message.tool_calls
                     if call["name"] not in SILENT_TOOLS
                 )
+            elif isinstance(message, ToolMessage) and message.name not in SILENT_TOOLS:
+                ok = message.status != "error"
+                events.append(
+                    ToolResult(message.name or "", ok, _first_line(message.content), call_id=message.tool_call_id)
+                )
     return events
+
+
+def _first_line(content: str | list) -> str:
+    line = next((line.strip() for line in _text(content).splitlines() if line.strip()), "")
+    return line if len(line) <= RESULT_SUMMARY_WIDTH else f"{line[: RESULT_SUMMARY_WIDTH - 1]}…"
 
 
 def _text(content: str | list) -> str:

@@ -1,6 +1,7 @@
 """Eva-specific tools added to the Deep Agents built-ins."""
 
 from datetime import datetime, timedelta
+from typing import Literal
 
 from langchain_core.tools import BaseTool, tool
 from langgraph.config import get_stream_writer
@@ -9,6 +10,10 @@ from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.voice import SpeechChannel
 from eva.application.tasks import TaskBoard
+from eva.domain.models import MOODS
+
+REACTION_EVENT = "reaction"
+Mood = Literal[MOODS]
 
 
 def build_tools(
@@ -18,11 +23,20 @@ def build_tools(
     tasks: TaskBoard,
 ) -> list[BaseTool]:
     @tool
-    def speak_to_user(text: str) -> str:
+    def speak_to_user(text: str, mood: Mood | None = None) -> str:
         """Tell the user `text` right now, even mid-task: aloud when speech is on, as a status
         line otherwise. Use it for a conversational answer, a spoken summary of technical
-        results, or a short progress update. Never code, paths or raw lists."""
-        return speech.say(text, get_stream_writer())
+        results, or a short progress update. Never code, paths or raw lists. `mood`
+        optionally shows on your face while you say it."""
+        return speech.say(text, get_stream_writer(), mood)
+
+    @tool
+    def show_expression(mood: Mood) -> str:
+        """Show `mood` on your face for a few seconds, like a person reacting: happy when
+        something works, worried when it breaks, amused at a joke, curious at a question.
+        Call it alongside your other tool calls, and only when the moment has a feeling."""
+        get_stream_writer()({"type": REACTION_EVENT, "mood": mood})
+        return "Shown."
 
     @tool
     def restart_eva() -> str:
@@ -72,6 +86,7 @@ def build_tools(
 
     return [
         speak_to_user,
+        show_expression,
         restart_eva,
         schedule_follow_up,
         cancel_follow_up,
