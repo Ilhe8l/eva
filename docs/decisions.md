@@ -3,6 +3,12 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## Desktop notifications
+
+When a background task ends or Eva needs an approval, `notify-send` shows a
+desktop notification, so the user does not have to watch the terminal. Where
+`notify-send` is missing, nothing happens.
+
 ## Autonomous mode and "always allow"
 
 `ApprovalPolicy` holds the approval rules and state that can change during a

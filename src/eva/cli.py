@@ -8,6 +8,7 @@ import sys
 import threading
 from datetime import timedelta
 
+from eva.adapters.notifier import DesktopNotifier
 from eva.adapters.policy import ApprovalPolicy
 from eva.adapters.voice import KokoroSpeaker, SpeechPlayer, WhisperTranscriber
 from eva.bootstrap import bootstrap
@@ -41,9 +42,10 @@ def main() -> None:
     if args.speak:
         player.warm_up()
     policy = ApprovalPolicy(autonomous=settings.autonomous)
-    with bootstrap(settings, policy, ConsoleApproval(console, policy), ProgressView(player)) as app:
+    notifier = DesktopNotifier()
+    with bootstrap(settings, policy, ConsoleApproval(console, policy, notifier), ProgressView(player)) as app:
         app.speech.enabled = args.speak
-        terminal = Terminal(app, console, transcriber, player, heartbeat)
+        terminal = Terminal(app, console, transcriber, player, heartbeat, notifier)
         asyncio.run(terminal.run(resumed=args.resumed))
         player.wait()
         speaking = app.speech.enabled

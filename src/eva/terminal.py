@@ -20,6 +20,7 @@ from typing import Any
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
+from eva.adapters.notifier import DesktopNotifier
 from eva.adapters.policy import ApprovalPolicy
 from eva.adapters.voice import Microphone, SpeechPlayer, WhisperTranscriber
 from eva.application.messages import RESUMED_MESSAGE, follow_up_message, task_report_message, voice_message
@@ -133,13 +134,15 @@ class Console:
 
 
 class ConsoleApproval:
-    def __init__(self, console: Console, policy: ApprovalPolicy) -> None:
+    def __init__(self, console: Console, policy: ApprovalPolicy, notifier: DesktopNotifier) -> None:
         self.console = console
         self.policy = policy
+        self.notifier = notifier
 
     def approve(self, action: ActionRequest) -> bool:
         header = f"\n── {speaker_label(action.source)} wants to run {action.name} ──"
         question = "Approve? [y]es / [N]o / [a]lways this session: "
+        self.notifier.notify(f"{speaker_label(action.source)} needs your approval", summarize(action.name, action.arguments))
         answer = self.console.ask(question, context=f"{header}\n{describe(action)}").strip().lower()
         if answer in ALWAYS:
             self.policy.always_allow(action.name, action.arguments)
@@ -220,7 +223,9 @@ class Terminal:
         transcriber: WhisperTranscriber,
         player: SpeechPlayer,
         heartbeat: timedelta | None,
+        notifier: DesktopNotifier | None = None,
     ) -> None:
+        self.notifier = notifier or DesktopNotifier()
         self.app = app
         self.console = console
         self.transcriber = transcriber
@@ -279,6 +284,7 @@ class Terminal:
 
     def _task_finished(self, task: BackgroundTask) -> None:
         print(f"\n[task {task.id} {task.status.value}: {task.title}]")
+        self.notifier.notify(f"Eva: task {task.status.value}", task.title)
         report = task_report_message(task.id, task.title, task.status.value, task.report)
         self._turns.put_nowait(Turn(TurnKind.SYSTEM, report))
 
