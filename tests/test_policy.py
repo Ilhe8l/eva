@@ -14,6 +14,8 @@ from eva.adapters.policy import is_safe_command, is_sensitive_path, needs_write_
         'grep -rn "a|b" src',
         "date +%F",
         "find . -name '*.py'",
+        "du -h -d 1 . 2>/dev/null | sort -h -r | head",
+        "grep -r TODO src 2>&1 | wc -l",
     ],
 )
 def test_read_only_commands_run_freely(command):
@@ -37,6 +39,9 @@ def test_read_only_commands_run_freely(command):
         "git diff --output=x",
         "python script.py",
         "sleep 5 &",
+        "sort -o sorted.txt data.txt",
+        "ls 2>/tmp/errors.log",
+        "cat notes.txt >/dev/nullx",
         "",
         "date -s 2020-01-01",
         "rg --pre=sh x",

@@ -11,6 +11,7 @@ Read-only shell commands and memory writes run freely. Everything else pauses.
 """
 
 import posixpath
+import re
 import shlex
 from collections.abc import Callable
 from pathlib import PurePosixPath
@@ -24,6 +25,8 @@ FREE_WRITE_PREFIXES = (MEMORY_ROUTE,)
 SENSITIVE_MARKERS = (".env", ".ssh", ".gnupg", ".aws", ".netrc", "id_rsa", "id_ed25519", "credentials")
 _CHAIN_OPERATORS = {"|", "&&", "||"}
 _FORBIDDEN_CHARACTERS = ("$", "`", "\n")
+# Discarding output is harmless, so these redirects do not make a command unsafe.
+_DISCARD_REDIRECTS = re.compile(r"(?<!\S)(?:[12]?>|&>)\s*/dev/null(?!\S)|(?<!\S)2>&1(?!\S)")
 
 
 def _no_flags(*flags: str) -> Callable[[list[str]], bool]:
@@ -51,9 +54,12 @@ def _git_args(args: list[str]) -> bool:
 
 
 SAFE_COMMANDS: dict[str, Callable[[list[str]], bool]] = {
+    "basename": _any_args,
     "cat": _any_args,
+    "cut": _any_args,
     "date": _date_args,
     "df": _any_args,
+    "dirname": _any_args,
     "du": _any_args,
     "echo": _any_args,
     "file": _any_args,
@@ -67,7 +73,9 @@ SAFE_COMMANDS: dict[str, Callable[[list[str]], bool]] = {
     "nvidia-smi": lambda args: not args,
     "ps": _any_args,
     "pwd": _any_args,
+    "realpath": _any_args,
     "rg": _no_flags("--pre", "--pre-glob"),
+    "sort": _no_flags("-o", "--output"),
     "stat": _any_args,
     "tail": _any_args,
     "tree": _no_flags("-o"),
@@ -82,9 +90,11 @@ SAFE_COMMANDS: dict[str, Callable[[list[str]], bool]] = {
 def is_safe_command(command: str) -> bool:
     """Return True for a read-only command that may run without approval.
 
-    Pipelines and `&&`/`||` chains are safe when every part is safe. Redirects,
-    substitutions, background jobs and sensitive paths always need approval.
+    Pipelines and `&&`/`||` chains are safe when every part is safe. Redirects
+    (other than to /dev/null), substitutions, background jobs and sensitive paths
+    always need approval.
     """
+    command = _DISCARD_REDIRECTS.sub(" ", command)
     if not command.strip() or any(char in command for char in _FORBIDDEN_CHARACTERS):
         return False
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
