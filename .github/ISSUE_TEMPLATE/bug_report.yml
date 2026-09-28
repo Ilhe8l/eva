@@ -1,0 +1,30 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Terminal output
+      description: The relevant part of Eva's output. Remove anything private first.
+      render: text
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: e.g. lmstudio:unsloth/qwen3.5-4b
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install
+      options:
+        - With voice (uv sync --extra voice)
+        - Text only
+        - Docker

@@ -130,8 +130,19 @@ uv run ruff check . && uv run ruff format --check .
 ```
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org), and
-release-please turns them into versions and the changelog. Docker users can run
-`docker compose run --rm eva`; shell commands then run inside the container.
+release-please turns them into versions and the changelog. See
+[CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+
+### Docker
+
+```bash
+echo "EVA_UID=$(id -u)" >> .env && echo "EVA_GID=$(id -g)" >> .env
+docker compose run --rm eva
+```
+
+The container runs as your user, so the files Eva writes in the repository stay
+yours. Her shell commands run inside the container; run her on the host when she
+needs the rest of your computer, or for voice.
 
 ## License
 

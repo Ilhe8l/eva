@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest an idea for Eva
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like Eva to do?
+      description: The problem or use case, before any particular solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could it work?
