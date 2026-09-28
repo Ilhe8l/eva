@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      # The voice extra (torch, Whisper, Kokoro) is left out; its tests skip themselves.
+      - run: uv sync --locked --extra test
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
