@@ -41,6 +41,9 @@ def test_stopping_the_player_drops_queued_sentences():
 
 
 def test_whisper_uses_the_configured_precision_on_the_gpu():
+    import pytest
+
+    pytest.importorskip("numpy", reason="needs the voice extra")
     from eva.adapters.voice import WhisperTranscriber
 
     calls = []
