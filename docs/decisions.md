@@ -3,6 +3,24 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## A local setup for a 6 GB GPU
+
+Measured with Qwen3.5-4B (Q4_K_M) served by LM Studio, next to Whisper and
+Kokoro on the same GPU:
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| Model | `unsloth/qwen3.5-4b`, all layers on the GPU | ~44 tokens/s; a 9B split with the CPU ran at ~11 |
+| Context | 65536 tokens | Qwen3.5's hybrid attention keeps the cache small |
+| KV cache | q4_0 (K and V), flash attention on | 64K fits in about 3.8 GB |
+| Parallel slots | 2 | background tasks run next to the conversation |
+| Thinking | on | better tool choice on multi-step requests, at some latency |
+| Whisper | `int8_float16` on the GPU | about 1 GB instead of 1.6, same accuracy for speech |
+
+Everything together uses about 5.6 GB. Kokoro stays on the GPU: on the CPU its
+first sentence takes about 2 s instead of 0.1 s. The vision projector (F32,
+1.3 GB) does not fit alongside the voice models, so the model runs text-only.
+
 ## Hands-free listening
 
 `:listen on` (or `--listen`) keeps the microphone open. `UtteranceDetector`
