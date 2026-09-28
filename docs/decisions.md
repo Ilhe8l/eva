@@ -3,6 +3,16 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## Steering: messages reach Eva mid-task
+
+Messages typed while the main turn runs are not queued behind it.
+They go to a per-thread `SteeringInbox`, and `SteeringMiddleware.before_model`
+adds them to the history as `[sent while you were working] ...` before the
+next model call. The user can therefore redirect or cancel work in progress
+with plain words. A message that arrives after the last model call becomes the
+next turn. The thread is found through the run's `thread_id`, so the same
+middleware serves the main conversation and background tasks.
+
 ## Desktop notifications
 
 When a background task ends or Eva needs an approval, `notify-send` shows a

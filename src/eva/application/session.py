@@ -28,6 +28,13 @@ class EvaSession:
     def cancel(self) -> None:
         self.agent.cancel()
 
+    def steer(self, message: str) -> None:
+        """Add a message to the turn in progress; Eva reads it at her next step."""
+        self.agent.steer(message)
+
+    def take_unread(self) -> list[str]:
+        return self.agent.take_unread()
+
     def heartbeat(self, now: datetime) -> str | None:
         """Let Eva act on her own; return her reply, or None if she had nothing to do.
 

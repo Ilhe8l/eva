@@ -9,6 +9,7 @@ from eva.adapters.agent import DeepAgentAdapter, Workspace
 from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.policy import ApprovalPolicy
+from eva.adapters.steering import STEERING_PREFIX
 from eva.adapters.speech_mode import PROGRESS_NUDGE, SPEECH_OFF, SPEECH_ON, SpeechModeMiddleware
 from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
@@ -197,3 +198,32 @@ def test_autonomous_mode_and_always_allow_skip_approval(make_agent):
     assert step.pending_actions == ()
     step = make(_call("write_file", file_path="/b.txt", content="x"), policy=policy).ask("write b")
     assert [action.name for action in step.pending_actions] == ["write_file"]
+
+
+def test_messages_sent_mid_turn_reach_the_next_model_call(make_agent):
+    make, _, _ = make_agent
+    holder = {}
+
+    def steer_once(event):
+        if isinstance(event, ToolUse) and not holder.get("sent"):
+            holder["sent"] = True
+            holder["agent"].steer("actually, only list Python files")
+
+    agent = make(_call("execute", command="ls"))
+    agent.on_event = steer_once
+    holder["agent"] = agent
+    agent.ask("list files")
+
+    messages = agent._graph.get_state(agent.config).values["messages"]
+    kinds = [type(message).__name__ for message in messages]
+    assert kinds == ["HumanMessage", "AIMessage", "ToolMessage", "HumanMessage", "AIMessage"]
+    assert messages[3].content == f"{STEERING_PREFIX} actually, only list Python files"
+    assert agent.take_unread() == []
+
+
+def test_messages_sent_after_the_last_step_are_kept_for_a_new_turn(make_agent):
+    make, _, _ = make_agent
+    agent = make(AIMessage(content="Done."))
+    agent.ask("hi")
+    agent.steer("one more thing")
+    assert agent.take_unread() == ["one more thing"]

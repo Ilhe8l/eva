@@ -21,6 +21,7 @@ from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer, Command
 
 from eva.adapters.policy import BUILTIN_SKILLS_ROUTE, MEMORY_ROUTE, SKILLS_ROUTE
+from eva.adapters.steering import SteeringInbox, SteeringMiddleware
 from eva.adapters.voice import SPEECH_EVENT
 from eva.domain.models import ActionRequest, AgentEvent, AgentStep, Speech, ToolUse, TurnCancelled
 from eva.prompts import build_system_prompt
@@ -95,6 +96,7 @@ class DeepAgentAdapter:
         interrupt_on: dict[str, InterruptOnConfig],
         middleware: Sequence[AgentMiddleware] = (),
     ) -> None:
+        self.inbox = SteeringInbox()
         self.graph = create_deep_agent(
             model=model,
             tools=list(tools),
@@ -103,7 +105,7 @@ class DeepAgentAdapter:
             memory=[MEMORY_INDEX],
             skills=[BUILTIN_SKILLS_ROUTE, SKILLS_ROUTE],
             interrupt_on=interrupt_on,
-            middleware=middleware,
+            middleware=[*middleware, SteeringMiddleware(self.inbox)],
             checkpointer=checkpointer,
             name="eva",
         )
@@ -114,7 +116,7 @@ class DeepAgentAdapter:
         on_event: Callable[[AgentEvent], None] = lambda event: None,
         source: str | None = None,
     ) -> "AgentThread":
-        return AgentThread(self.graph, thread_id, on_event, source)
+        return AgentThread(self.graph, self.inbox, thread_id, on_event, source)
 
 
 class AgentThread:
@@ -124,8 +126,17 @@ class AgentThread:
     background task from the main conversation.
     """
 
-    def __init__(self, graph, thread_id: str, on_event: Callable[[AgentEvent], None], source: str | None) -> None:
+    def __init__(
+        self,
+        graph,
+        inbox: SteeringInbox,
+        thread_id: str,
+        on_event: Callable[[AgentEvent], None],
+        source: str | None,
+    ) -> None:
         self._graph = graph
+        self._inbox = inbox
+        self._thread_id = thread_id
         self.config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 150}
         self.on_event = on_event
         self.source = source
@@ -146,6 +157,14 @@ class AgentThread:
             resume[interrupt_id] = {"decisions": decisions[start : start + count]}
             start += count
         return self._run(Command(resume=resume))
+
+    def steer(self, message: str) -> None:
+        """Deliver `message` to the running turn at its next model call."""
+        self._inbox.post(self._thread_id, message)
+
+    def take_unread(self) -> list[str]:
+        """Messages sent with `steer` that the turn ended before reading."""
+        return self._inbox.take(self._thread_id)
 
     def cancel(self) -> None:
         """Stop the running turn at its next step; a tool already running finishes first."""

@@ -43,8 +43,8 @@ microphone and speakers. It uses the GPU when one is available.
 | `:auto on` / `:auto off` | Let Eva act without asking / ask again |
 | `:quit` | Exit and save a session summary |
 
-You can keep typing while Eva works; your message reaches her after her
-current task. For long jobs she starts background tasks, keeps talking with you
+You can keep typing while Eva works: she reads your message at her next step,
+so you can redirect or stop her in plain words. For long jobs she starts background tasks, keeps talking with you
 while they run, and tells you when they finish. After `EVA_HEARTBEAT_MINUTES` of silence (default 30), she checks
 her journal and may act on her own. She can also schedule follow-ups for
 herself.

@@ -279,7 +279,9 @@ class Terminal:
 
     async def _submit(self, message: str) -> None:
         if self._busy:
-            print("(Eva will read this after her current task.)")
+            self.app.session.steer(message)
+            print("(Eva will read this at her next step.)")
+            return
         await self._turns.put(Turn(TurnKind.USER, message))
 
     def _task_finished(self, task: BackgroundTask) -> None:
@@ -297,6 +299,8 @@ class Terminal:
             finally:
                 self._busy = False
                 self._last_activity = now()
+            for message in self.app.session.take_unread():  # sent too late for that turn
+                await self._turns.put(Turn(TurnKind.USER, message))
             if self.restart:
                 self._stop.set()
 
