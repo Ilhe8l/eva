@@ -13,7 +13,7 @@ from eva.adapters.policy import ApprovalPolicy
 from eva.adapters.voice import VOICE_MISSING, KokoroSpeaker, SpeechPlayer, WhisperTranscriber, voice_available
 from eva.bootstrap import bootstrap
 from eva.config import Settings
-from eva.terminal import Console, ConsoleApproval, ProgressView, Terminal
+from eva.terminal import Console, ConsoleApproval, ProgressView, Terminal, View
 
 
 def main() -> None:
@@ -29,6 +29,12 @@ def main() -> None:
     )
     parser.add_argument("--voice", default=os.getenv("EVA_VOICE", "af_heart"))
     parser.add_argument("--voice-language", default=os.getenv("EVA_VOICE_LANGUAGE", "a"))
+    parser.add_argument(
+        "--plain",
+        action="store_true",
+        default=os.getenv("EVA_UI", "").lower() == "plain",
+        help="Line-by-line output instead of the split screen (EVA_UI=plain)",
+    )
     parser.add_argument("--resumed", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
@@ -36,26 +42,32 @@ def main() -> None:
     except ValueError as exc:
         parser.error(str(exc))
 
-    console = Console()
     player = SpeechPlayer(
         KokoroSpeaker(voice=args.voice, language=args.voice_language),
-        on_error=lambda exc: print(f"Voice output unavailable: {exc}"),
+        on_error=lambda exc: view.notice(f"Voice output unavailable: {exc}", tone="error"),
     )
+    view: View
+    if args.plain or not (sys.stdin.isatty() and sys.stdout.isatty()):
+        console, view = Console(), ProgressView(player)
+    else:
+        from eva.ui.tui import TuiView
+
+        view = TuiView(player)
+        console = view.console
     heartbeat = timedelta(minutes=settings.heartbeat_minutes) if settings.heartbeat_minutes > 0 else None
-    transcriber = WhisperTranscriber(args.whisper_model, args.whisper_compute_type, notify=print)
+    transcriber = WhisperTranscriber(args.whisper_model, args.whisper_compute_type, notify=view.notice)
     if importlib.util.find_spec("faster_whisper"):
         threading.Thread(target=transcriber.warm_up, daemon=True).start()
     if (args.speak or args.listen) and not voice_available():
-        print(VOICE_MISSING)
+        view.notice(VOICE_MISSING, tone="warning")
         args.speak = args.listen = False
     if args.speak:
         player.warm_up()
     policy = ApprovalPolicy(autonomous=settings.autonomous)
     notifier = DesktopNotifier()
-    progress = ProgressView(player)
-    with bootstrap(settings, policy, ConsoleApproval(console, policy, notifier), progress) as app:
+    with bootstrap(settings, policy, ConsoleApproval(console, policy, notifier), view) as app:
         app.speech.enabled = args.speak
-        terminal = Terminal(app, console, transcriber, player, heartbeat, notifier, progress)
+        terminal = Terminal(app, console, transcriber, player, heartbeat, notifier, view)
         asyncio.run(terminal.run(resumed=args.resumed, listen=args.listen))
         player.wait()
         speaking = app.speech.enabled
