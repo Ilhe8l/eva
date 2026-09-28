@@ -45,13 +45,13 @@ class SpeechChannel:
     def __init__(self) -> None:
         self.enabled = False
 
-    def say(self, text: str, emit: Callable[[dict], None]) -> str:
+    def say(self, text: str, emit: Callable[[dict], None], mood: str | None = None) -> str:
         spoken = text.strip()
         if not spoken:
             return "Nothing was said because the text was empty."
         if len(spoken) > MAX_SPOKEN_CHARACTERS:
             return f"Not said: keep it under {MAX_SPOKEN_CHARACTERS} characters."
-        emit({"type": SPEECH_EVENT, "text": spoken, "aloud": self.enabled})
+        emit({"type": SPEECH_EVENT, "text": spoken, "aloud": self.enabled, "mood": mood})
         return "Spoken to the user." if self.enabled else "Shown to the user as a status line (speech is off)."
 
 
