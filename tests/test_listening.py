@@ -1,6 +1,8 @@
-import numpy as np
+import pytest
 
-from eva.adapters.voice import MICROPHONE_SAMPLE_RATE, UtteranceDetector
+np = pytest.importorskip("numpy", reason="needs the voice extra")
+
+from eva.adapters.voice import MICROPHONE_SAMPLE_RATE, UtteranceDetector  # noqa: E402
 
 FRAME = UtteranceDetector.FRAME_SAMPLES
 rng = np.random.default_rng(0)
@@ -51,6 +53,7 @@ def test_reset_drops_a_partial_utterance():
 
 
 def test_silero_classifier_tells_noise_from_nothing():
+    pytest.importorskip("faster_whisper", reason="needs the voice extra")
     from eva.adapters.voice import SileroSpeechClassifier
 
     classifier = SileroSpeechClassifier()
