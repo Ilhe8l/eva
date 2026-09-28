@@ -3,6 +3,21 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## Hands-free listening
+
+`:listen on` (or `--listen`) keeps the microphone open. `UtteranceDetector`
+cuts the stream into utterances: it starts after three speech frames and ends
+after 0.8 s of pause, with 0.3 s of pre-roll so first syllables survive. Each
+utterance is transcribed and sent as `[voice] ...`. Each frame is classified
+by Silero VAD, which ships with faster-whisper and runs on CPU. A neural VAD is
+used rather than a loudness threshold, which breaks down under steady
+background noise that is as loud as speech. While Eva speaks, and for 0.5 s after, the microphone
+is ignored so she does not hear herself.
+
+Transcripts also drop segments Whisper marks as probably not speech
+(`no_speech_prob` ≥ 0.6), which removes the "Thank you." it hallucinates on
+noise.
+
 ## The reply streams as it is written
 
 The main thread adds `messages` to its stream modes. Text chunks from the

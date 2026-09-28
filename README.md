@@ -36,6 +36,7 @@ microphone and speakers. It uses the GPU when one is available.
 | --- | --- |
 | any text | Talk to Eva |
 | `:record` | Talk; press Enter to stop. The transcript is shown and sent |
+| `:listen on` / `:listen off` | Hands-free: just talk, Eva notices when you stop (also `--listen`) |
 | `:speak on` / `:speak off` | Let Eva speak aloud |
 | `:shh` | Stop talking now |
 | `:stop` | Stop what Eva is doing, at the next step |

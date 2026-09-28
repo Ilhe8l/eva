@@ -20,6 +20,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Eva, a personal assistant in your terminal")
     parser.add_argument("--model", help="provider:model, e.g. google_genai:gemini-2.5-flash or lmstudio:<id>")
     parser.add_argument("--speak", action="store_true", help="Start with speech output on")
+    parser.add_argument("--listen", action="store_true", help="Start listening hands-free")
     parser.add_argument("--whisper-model", default=os.getenv("EVA_WHISPER_MODEL", "large-v3-turbo"))
     parser.add_argument("--voice", default=os.getenv("EVA_VOICE", "af_heart"))
     parser.add_argument("--voice-language", default=os.getenv("EVA_VOICE_LANGUAGE", "a"))
@@ -47,7 +48,7 @@ def main() -> None:
     with bootstrap(settings, policy, ConsoleApproval(console, policy, notifier), progress) as app:
         app.speech.enabled = args.speak
         terminal = Terminal(app, console, transcriber, player, heartbeat, notifier, progress)
-        asyncio.run(terminal.run(resumed=args.resumed))
+        asyncio.run(terminal.run(resumed=args.resumed, listen=args.listen))
         player.wait()
         speaking = app.speech.enabled
         if not terminal.restart and (saved := app.summarizer.save()):

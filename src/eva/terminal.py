@@ -22,7 +22,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 
 from eva.adapters.notifier import DesktopNotifier
 from eva.adapters.policy import ApprovalPolicy
-from eva.adapters.voice import Microphone, SpeechPlayer, WhisperTranscriber
+from eva.adapters.voice import HandsFreeListener, Microphone, SpeechPlayer, WhisperTranscriber
 from eva.application.messages import RESUMED_MESSAGE, follow_up_message, task_report_message, voice_message
 from eva.application.tasks import BackgroundTask
 from eva.bootstrap import Application
@@ -31,7 +31,7 @@ from eva.domain.models import ActionRequest, AgentEvent, Speech, TextDelta, Tool
 YES = {"y", "yes", "s", "sim"}
 ALWAYS = {"a", "always", "sempre"}
 HELP = (
-    "Commands: :record (talk, then Enter), :speak on|off, :shh (stop talking), "
+    "Commands: :record (talk, then Enter), :listen on|off (hands-free), :speak on|off, :shh (stop talking), "
     ":stop (stop working), :tasks, :cancel ID, :auto on|off, :quit"
 )
 AUTONOMOUS_WARNING = "Autonomous mode: Eva runs commands and edits files without asking. `:auto off` to stop."
@@ -268,20 +268,25 @@ class Terminal:
         self.transcriber = transcriber
         self.player = player
         self.microphone = Microphone()
+        self.listener = HandsFreeListener(self._heard, is_muted=lambda: player.busy)
         self.heartbeat = heartbeat
         self._turns: asyncio.Queue[Turn] = asyncio.Queue()
         self._stop = asyncio.Event()
         self._busy = False
         self._last_activity = now()
         self._recording: asyncio.Task | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     @property
     def restart(self) -> bool:
         return self.app.updater.restart_requested
 
-    async def run(self, resumed: bool = False) -> None:
+    async def run(self, resumed: bool = False, listen: bool = False) -> None:
         loop = asyncio.get_running_loop()
+        self._loop = loop
         self.console.bind(loop)
+        if listen:
+            self._command(":listen on")
         self.app.tasks.on_finish = lambda task: loop.call_soon_threadsafe(self._task_finished, task)
         print(f"Eva is ready. {HELP}")
         if self.app.policy.autonomous:
@@ -292,6 +297,7 @@ class Terminal:
             tasks = [asyncio.create_task(job) for job in (self._read(), self._work(), self._tick())]
             await self._stop.wait()
             self.app.tasks.on_finish = lambda task: None  # the loop is about to close
+            self.listener.stop()
             self.console.close()
             for task in tasks:
                 task.cancel()
@@ -387,6 +393,13 @@ class Terminal:
             # Record in the background: the keyboard reader must stay free to see Enter.
             if self._recording is None or self._recording.done():
                 self._recording = asyncio.create_task(self._record())
+        elif name == ":listen" and argument in {"on", "off"}:
+            if argument == "on":
+                self.listener.start()
+                print("Listening hands-free: just talk. `:listen off` to stop.")
+            else:
+                self.listener.stop()
+                print("Hands-free listening off.")
         elif name == ":shh":
             self.player.stop()
         elif name == ":stop":
@@ -413,6 +426,17 @@ class Terminal:
         message = await in_daemon_thread(self._listen)
         if message:
             await self._submit(message)
+
+    def _heard(self, audio) -> None:
+        """An utterance from hands-free listening (listener thread): transcribe and send it."""
+        try:
+            text = self.transcriber.transcribe(audio)
+        except Exception as exc:  # noqa: BLE001 - keep listening after a failed transcription
+            print(f"Voice input unavailable: {exc}")
+            return
+        if text:
+            print(f"You (voice)> {text}")
+            asyncio.run_coroutine_threadsafe(self._submit(voice_message(text)), self._loop)
 
     def _listen(self) -> str | None:
         """Record until Enter, transcribe, and show the user what Eva will read."""
