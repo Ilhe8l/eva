@@ -406,7 +406,7 @@ class SpeechPlayer:
             self._speaking = True
             try:
                 job()
-            except (ImportError, OSError, ValueError) as exc:
+            except Exception as exc:  # noqa: BLE001 - a failed sentence must not silence Eva for good
                 self._on_error(exc)
             finally:
                 self._speaking = False

@@ -58,3 +58,27 @@ def test_whisper_uses_the_configured_precision_on_the_gpu():
     transcriber = WhisperTranscriber("tiny", compute_type="float16")
     assert transcriber._on_gpu(FakeModel) is not None
     assert calls == [("tiny", "cuda", "float16")]
+
+
+def test_a_failed_sentence_does_not_silence_the_player():
+    from eva.adapters.voice import SpeechPlayer
+
+    class FlakySpeaker:
+        def __init__(self):
+            self.spoken = []
+
+        def speak(self, text):
+            if text == "boom":
+                raise RuntimeError("CUDA out of memory")
+            self.spoken.append(text)
+
+        def stop(self):
+            pass
+
+    errors, speaker = [], FlakySpeaker()
+    player = SpeechPlayer(speaker, on_error=errors.append)
+    player.play("boom")
+    player.play("still here")
+    player.wait()
+    assert speaker.spoken == ["still here"]
+    assert "out of memory" in str(errors[0])
