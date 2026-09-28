@@ -199,9 +199,13 @@ class HandsFreeListener:
 
 class WhisperTranscriber:
     def __init__(
-        self, model_name: str = "large-v3-turbo", notify: Callable[[str], None] = lambda message: None
+        self,
+        model_name: str = "large-v3-turbo",
+        compute_type: str = "int8_float16",
+        notify: Callable[[str], None] = lambda message: None,
     ) -> None:
         self.model_name = model_name
+        self.compute_type = compute_type  # precision on the GPU; the CPU fallback always uses int8
         self.notify = notify
         self._model = None
         self._lock = threading.Lock()
@@ -247,7 +251,7 @@ class WhisperTranscriber:
 
         _load_cublas_12()
         try:
-            model = model_class(self.model_name, device="cuda", compute_type="int8_float16")
+            model = model_class(self.model_name, device="cuda", compute_type=self.compute_type)
             segments, _ = model.transcribe(np.zeros(MICROPHONE_SAMPLE_RATE, dtype=np.float32), language="en")
             list(segments)  # runs the encoder now, so missing CUDA libraries fail here
         except (RuntimeError, ValueError) as exc:

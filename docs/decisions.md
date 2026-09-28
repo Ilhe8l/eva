@@ -15,7 +15,7 @@ Kokoro on the same GPU:
 | KV cache | q4_0 (K and V), flash attention on | 64K fits in about 3.8 GB |
 | Parallel slots | 2 | background tasks run next to the conversation |
 | Thinking | on | better tool choice on multi-step requests, at some latency |
-| Whisper | `int8_float16` on the GPU | about 1 GB instead of 1.6, same accuracy for speech |
+| Whisper | `int8_float16` on the GPU (`EVA_WHISPER_COMPUTE_TYPE`) | about 1 GB instead of 1.6, same accuracy for speech |
 
 Everything together uses about 5.6 GB. Kokoro stays on the GPU: on the CPU its
 first sentence takes about 2 s instead of 0.1 s. The vision projector (F32,

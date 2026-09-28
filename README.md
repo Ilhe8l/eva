@@ -92,6 +92,7 @@ Eva reads `.env`. Models are named `provider:model`:
 | `EVA_MODEL` | required | Chat model, `provider:model` |
 | `EVA_LM_STUDIO_URL` | `http://localhost:1234/v1` | LM Studio server |
 | `EVA_WHISPER_MODEL` | `large-v3-turbo` | Speech recognition model |
+| `EVA_WHISPER_COMPUTE_TYPE` | `int8_float16` | Whisper precision on the GPU (`float16` for full precision) |
 | `EVA_VOICE` / `EVA_VOICE_LANGUAGE` | `af_heart` / `a` | [Kokoro voice](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md) |
 | `EVA_AUTONOMOUS` | off | Act without asking |
 | `EVA_HEARTBEAT_MINUTES` | `30` | Quiet time before she checks in (`0` disables) |

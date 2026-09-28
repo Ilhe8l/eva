@@ -38,3 +38,20 @@ def test_stopping_the_player_drops_queued_sentences():
     player.stop()
     player.wait()
     assert speaker.spoken == ["first"]
+
+
+def test_whisper_uses_the_configured_precision_on_the_gpu():
+    from eva.adapters.voice import WhisperTranscriber
+
+    calls = []
+
+    class FakeModel:
+        def __init__(self, name, device, compute_type):
+            calls.append((name, device, compute_type))
+
+        def transcribe(self, audio, language=None):
+            return [], None
+
+    transcriber = WhisperTranscriber("tiny", compute_type="float16")
+    assert transcriber._on_gpu(FakeModel) is not None
+    assert calls == [("tiny", "cuda", "float16")]

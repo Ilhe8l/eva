@@ -22,6 +22,11 @@ def main() -> None:
     parser.add_argument("--speak", action="store_true", help="Start with speech output on")
     parser.add_argument("--listen", action="store_true", help="Start listening hands-free")
     parser.add_argument("--whisper-model", default=os.getenv("EVA_WHISPER_MODEL", "large-v3-turbo"))
+    parser.add_argument(
+        "--whisper-compute-type",
+        default=os.getenv("EVA_WHISPER_COMPUTE_TYPE", "int8_float16"),
+        help="Whisper precision on the GPU, e.g. int8_float16 or float16",
+    )
     parser.add_argument("--voice", default=os.getenv("EVA_VOICE", "af_heart"))
     parser.add_argument("--voice-language", default=os.getenv("EVA_VOICE_LANGUAGE", "a"))
     parser.add_argument("--resumed", action="store_true", help=argparse.SUPPRESS)
@@ -37,7 +42,7 @@ def main() -> None:
         on_error=lambda exc: print(f"Voice output unavailable: {exc}"),
     )
     heartbeat = timedelta(minutes=settings.heartbeat_minutes) if settings.heartbeat_minutes > 0 else None
-    transcriber = WhisperTranscriber(model_name=args.whisper_model, notify=print)
+    transcriber = WhisperTranscriber(args.whisper_model, args.whisper_compute_type, notify=print)
     if importlib.util.find_spec("faster_whisper"):
         threading.Thread(target=transcriber.warm_up, daemon=True).start()
     if args.speak:
