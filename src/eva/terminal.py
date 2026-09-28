@@ -34,10 +34,16 @@ from eva.domain.models import ActionRequest, AgentEvent, Speech, TextDelta, Tool
 
 YES = {"y", "yes", "s", "sim"}
 ALWAYS = {"a", "always", "sempre"}
-HELP = (
-    "Commands: :record (talk, then Enter), :listen on|off (hands-free), :speak on|off, :shh (stop talking), "
-    ":stop (stop working), :tasks, :cancel ID, :auto on|off, :quit"
-)
+HELP = """Commands:
+  :record          talk, then press Enter
+  :listen on|off   hands-free listening
+  :speak on|off    let Eva speak aloud
+  :shh             stop talking now
+  :stop            stop what Eva is doing
+  :tasks           list background tasks
+  :cancel ID       stop a background task
+  :auto on|off     act without asking
+  :quit            exit"""
 AUTONOMOUS_WARNING = "Autonomous mode: Eva runs commands and edits files without asking. `:auto off` to stop."
 PREVIEW_LINES = 40
 SUMMARY_WIDTH = 100
@@ -326,7 +332,7 @@ class Terminal:
         if listen:
             self._command(":listen on")
         self.app.tasks.on_finish = lambda task: loop.call_soon_threadsafe(self._task_finished, task)
-        print(f"Eva is ready. {HELP}")
+        print("Eva is ready. Type :help for commands.")
         if self.app.policy.autonomous:
             print(AUTONOMOUS_WARNING)
         if resumed:
