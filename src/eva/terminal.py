@@ -142,7 +142,9 @@ class ConsoleApproval:
     def approve(self, action: ActionRequest) -> bool:
         header = f"\n── {speaker_label(action.source)} wants to run {action.name} ──"
         question = "Approve? [y]es / [N]o / [a]lways this session: "
-        self.notifier.notify(f"{speaker_label(action.source)} needs your approval", summarize(action.name, action.arguments))
+        self.notifier.notify(
+            f"{speaker_label(action.source)} needs your approval", summarize(action.name, action.arguments)
+        )
         answer = self.console.ask(question, context=f"{header}\n{describe(action)}").strip().lower()
         if answer in ALWAYS:
             self.policy.always_allow(action.name, action.arguments)

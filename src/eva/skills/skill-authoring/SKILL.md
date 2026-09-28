@@ -48,6 +48,7 @@ It prints JSON; summarize the fields the user asked about.
   # dependencies = ["pillow"]
   # ///
   import sys
+
   ...
   ```
 

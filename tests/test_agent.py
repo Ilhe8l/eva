@@ -9,8 +9,8 @@ from eva.adapters.agent import DeepAgentAdapter, Workspace
 from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.policy import ApprovalPolicy
-from eva.adapters.steering import STEERING_PREFIX
 from eva.adapters.speech_mode import PROGRESS_NUDGE, SPEECH_OFF, SPEECH_ON, SpeechModeMiddleware
+from eva.adapters.steering import STEERING_PREFIX
 from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
 from eva.application.session import EvaSession
@@ -94,7 +94,9 @@ def test_speech_and_tool_use_stream_before_the_reply(make_agent):
     make, _, _ = make_agent
     events, speech = [], SpeechChannel()
     speech.enabled = True
-    agent = make(_call("speak_to_user", text="Checking now."), _call("execute", command="ls"), events=events, speech=speech)
+    agent = make(
+        _call("speak_to_user", text="Checking now."), _call("execute", command="ls"), events=events, speech=speech
+    )
     step = agent.ask("look around")
     assert events == [Speech("Checking now."), ToolUse("execute", {"command": "ls"})]
     assert step.reply == "All done."
@@ -149,8 +151,11 @@ def test_silent_work_triggers_a_spoken_progress_nudge(make_agent):
     make, _, _ = make_agent
     speech = SpeechChannel()
     speech.enabled = True
-    ls = lambda index: AIMessage(content="", tool_calls=[{"name": "execute", "args": {"command": "ls"}, "id": f"ls-{index}"}])
-    agent = make(*(ls(index) for index in range(4)), speech=speech)
+    calls = [
+        AIMessage(content="", tool_calls=[{"name": "execute", "args": {"command": "ls"}, "id": f"ls-{index}"}])
+        for index in range(4)
+    ]
+    agent = make(*calls, speech=speech)
     agent.ask("dig around")
     prompts = make.models[-1].prompts
     assert [PROGRESS_NUDGE in prompt for prompt in prompts] == [False, False, False, True, True]

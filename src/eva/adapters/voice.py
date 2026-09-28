@@ -184,7 +184,9 @@ class HandsFreeListener:
 
         detector = UtteranceDetector(SileroSpeechClassifier())
         frame_size = UtteranceDetector.FRAME_SAMPLES
-        with sd.InputStream(samplerate=MICROPHONE_SAMPLE_RATE, channels=1, dtype="float32", blocksize=frame_size) as stream:
+        with sd.InputStream(
+            samplerate=MICROPHONE_SAMPLE_RATE, channels=1, dtype="float32", blocksize=frame_size
+        ) as stream:
             while self._running.is_set():
                 frame, _ = stream.read(frame_size)
                 if self._is_muted():
@@ -196,7 +198,9 @@ class HandsFreeListener:
 
 
 class WhisperTranscriber:
-    def __init__(self, model_name: str = "large-v3-turbo", notify: Callable[[str], None] = lambda message: None) -> None:
+    def __init__(
+        self, model_name: str = "large-v3-turbo", notify: Callable[[str], None] = lambda message: None
+    ) -> None:
         self.model_name = model_name
         self.notify = notify
         self._model = None

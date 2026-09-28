@@ -225,7 +225,9 @@ def _events(chunk: dict) -> list[AgentEvent]:
         for message in messages if isinstance(messages, list) else []:
             if isinstance(message, AIMessage):
                 events.extend(
-                    ToolUse(call["name"], call["args"]) for call in message.tool_calls if call["name"] not in SILENT_TOOLS
+                    ToolUse(call["name"], call["args"])
+                    for call in message.tool_calls
+                    if call["name"] not in SILENT_TOOLS
                 )
     return events
 

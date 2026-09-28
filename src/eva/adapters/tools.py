@@ -85,4 +85,6 @@ def _list(follow_ups: FollowUpStore) -> str:
     items = follow_ups.pending()
     if not items:
         return "No follow-ups pending."
-    return "Pending follow-ups:\n" + "\n".join(f"- {item.id} at {item.due:%Y-%m-%d %H:%M}: {item.note}" for item in items)
+    return "Pending follow-ups:\n" + "\n".join(
+        f"- {item.id} at {item.due:%Y-%m-%d %H:%M}: {item.note}" for item in items
+    )

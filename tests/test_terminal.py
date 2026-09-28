@@ -61,7 +61,9 @@ def test_enter_stops_a_recording_and_sends_the_transcript(tmp_path):
     async def scenario():
         console = Console()
         console.bind(asyncio.get_running_loop())
-        terminal = Terminal(app=None, console=console, transcriber=FakeTranscriber(), player=SilentPlayer(), heartbeat=None)
+        terminal = Terminal(
+            app=None, console=console, transcriber=FakeTranscriber(), player=SilentPlayer(), heartbeat=None
+        )
         terminal.microphone = FakeMicrophone(tmp_path / "take.wav")
         terminal._command(":record")
         while not console.answer(""):  # the user presses Enter

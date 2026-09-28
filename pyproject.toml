@@ -36,6 +36,16 @@ eva = "eva.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/eva"]
 
+[dependency-groups]
+dev = ["ruff>=0.13"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
