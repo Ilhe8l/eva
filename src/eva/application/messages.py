@@ -36,3 +36,9 @@ def background_brief(task_id: str, title: str, instructions: str) -> str:
 
 def task_report_message(task_id: str, title: str, status: str, report: str) -> str:
     return f"[background task {task_id} '{title}' {status}] {report}\nTell the user the outcome briefly."
+
+
+STEP_LIMIT_MESSAGE = (
+    "[step limit] You used every step allowed for one turn and had to stop. Briefly tell the "
+    "user what you did, what is left, and ask whether to continue."
+)

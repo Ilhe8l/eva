@@ -27,10 +27,16 @@ from rich.markdown import Markdown
 from eva.adapters.notifier import DesktopNotifier
 from eva.adapters.policy import ApprovalPolicy
 from eva.adapters.voice import HandsFreeListener, Microphone, SpeechPlayer, WhisperTranscriber
-from eva.application.messages import RESUMED_MESSAGE, follow_up_message, task_report_message, voice_message
+from eva.application.messages import (
+    RESUMED_MESSAGE,
+    STEP_LIMIT_MESSAGE,
+    follow_up_message,
+    task_report_message,
+    voice_message,
+)
 from eva.application.tasks import BackgroundTask
 from eva.bootstrap import Application
-from eva.domain.models import ActionRequest, AgentEvent, Speech, TextDelta, ToolUse, TurnCancelled
+from eva.domain.models import ActionRequest, AgentEvent, Speech, StepLimitReached, TextDelta, ToolUse, TurnCancelled
 
 YES = {"y", "yes", "s", "sim"}
 ALWAYS = {"a", "always", "sempre"}
@@ -414,6 +420,12 @@ class Terminal:
         except TurnCancelled:
             self.progress.end_turn()
             print("(Stopped.)")
+            return
+        except StepLimitReached:
+            self.progress.end_turn()
+            print("(Eva reached her step limit for this turn.)")
+            if turn.message != STEP_LIMIT_MESSAGE:  # ask for a summary once, never in a loop
+                self._loop.call_soon_threadsafe(self._turns.put_nowait, Turn(TurnKind.SYSTEM, STEP_LIMIT_MESSAGE))
             return
         except Exception as exc:  # noqa: BLE001 - keep Eva alive on model errors
             self.progress.end_turn()

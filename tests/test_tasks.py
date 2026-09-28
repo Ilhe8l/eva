@@ -3,7 +3,7 @@ import threading
 import pytest
 
 from eva.application.tasks import MAX_RUNNING, TaskBoard, TaskStatus
-from eva.domain.models import TurnCancelled
+from eva.domain.models import StepLimitReached, TurnCancelled
 
 
 class FakeSession:
@@ -71,3 +71,10 @@ def test_shutdown_cancels_running_tasks_quietly():
     board.shutdown(timeout=2)
     assert task.status is TaskStatus.CANCELLED
     assert finished == []
+
+
+def test_a_task_that_runs_out_of_steps_says_so():
+    board, finished, done = _board(lambda task: FakeSession(StepLimitReached(), threading.Event()))
+    board.start("Huge job", "Explore everything").session.release.set()
+    assert done.wait(2)
+    assert finished[0].status is TaskStatus.FAILED and "step limit" in finished[0].report

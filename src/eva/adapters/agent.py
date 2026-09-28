@@ -18,18 +18,29 @@ from langchain.agents.middleware import AgentMiddleware, InterruptOnConfig
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, RemoveMessage
 from langchain_core.tools import BaseTool
+from langgraph.errors import GraphRecursionError
 from langgraph.types import Checkpointer, Command
 
 from eva.adapters.policy import BUILTIN_SKILLS_ROUTE, MEMORY_ROUTE, SKILLS_ROUTE
 from eva.adapters.steering import SteeringInbox, SteeringMiddleware
 from eva.adapters.voice import SPEECH_EVENT
-from eva.domain.models import ActionRequest, AgentEvent, AgentStep, Speech, TextDelta, ToolUse, TurnCancelled
+from eva.domain.models import (
+    ActionRequest,
+    AgentEvent,
+    AgentStep,
+    Speech,
+    StepLimitReached,
+    TextDelta,
+    ToolUse,
+    TurnCancelled,
+)
 from eva.prompts import build_system_prompt
 
 BUILTIN_SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
 MEMORY_INDEX = f"{MEMORY_ROUTE}AGENTS.md"
 SHELL_TIMEOUT_SECONDS = 120
 SILENT_TOOLS = {"speak_to_user"}
+DEFAULT_MAX_STEPS = 500  # graph steps per turn; one tool call takes a few
 _SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
 
 
@@ -95,8 +106,10 @@ class DeepAgentAdapter:
         tools: Sequence[BaseTool],
         interrupt_on: dict[str, InterruptOnConfig],
         middleware: Sequence[AgentMiddleware] = (),
+        max_steps: int = DEFAULT_MAX_STEPS,
     ) -> None:
         self.inbox = SteeringInbox()
+        self.max_steps = max_steps
         self.graph = create_deep_agent(
             model=model,
             tools=list(tools),
@@ -118,7 +131,7 @@ class DeepAgentAdapter:
         stream_text: bool = False,
     ) -> "AgentThread":
         """A conversation on the shared graph; `stream_text` also reports reply text as it is generated."""
-        return AgentThread(self.graph, self.inbox, thread_id, on_event, source, stream_text)
+        return AgentThread(self.graph, self.inbox, thread_id, on_event, source, stream_text, self.max_steps)
 
 
 class AgentThread:
@@ -136,12 +149,13 @@ class AgentThread:
         on_event: Callable[[AgentEvent], None],
         source: str | None,
         stream_text: bool = False,
+        max_steps: int = DEFAULT_MAX_STEPS,
     ) -> None:
         self._graph = graph
         self._stream_modes = ["updates", "custom", *(["messages"] if stream_text else [])]
         self._inbox = inbox
         self._thread_id = thread_id
-        self.config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 150}
+        self.config = {"configurable": {"thread_id": thread_id}, "recursion_limit": max_steps}
         self.on_event = on_event
         self.source = source
         self._pending: list[tuple[str, int]] = []
@@ -183,17 +197,20 @@ class AgentThread:
             self._graph.update_state(self.config, {"messages": removals})
 
     def _run(self, payload) -> AgentStep:
-        for chunk in self._graph.stream(
-            payload,
-            config=self.config,
-            stream_mode=self._stream_modes,
-            subgraphs=True,
-            version="v2",
-        ):
-            if self._cancelled.is_set():
-                raise TurnCancelled
-            for event in _events(chunk):
-                self.on_event(replace(event, source=self.source))
+        try:
+            for chunk in self._graph.stream(
+                payload,
+                config=self.config,
+                stream_mode=self._stream_modes,
+                subgraphs=True,
+                version="v2",
+            ):
+                if self._cancelled.is_set():
+                    raise TurnCancelled
+                for event in _events(chunk):
+                    self.on_event(replace(event, source=self.source))
+        except GraphRecursionError:
+            raise StepLimitReached from None
         return self._step(self._graph.get_state(self.config))
 
     def _step(self, state) -> AgentStep:

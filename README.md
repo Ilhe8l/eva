@@ -95,6 +95,7 @@ Eva reads `.env`. Models are named `provider:model`:
 | `EVA_WHISPER_COMPUTE_TYPE` | `int8_float16` | Whisper precision on the GPU (`float16` for full precision) |
 | `EVA_VOICE` / `EVA_VOICE_LANGUAGE` | `af_heart` / `a` | [Kokoro voice](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md) |
 | `EVA_AUTONOMOUS` | off | Act without asking |
+| `EVA_MAX_STEPS` | `500` | Steps per turn before she stops and reports back |
 | `EVA_HEARTBEAT_MINUTES` | `30` | Quiet time before she checks in (`0` disables) |
 | `EVA_DATA_DIR` | `.eva` | Her journal, skills, conversation and follow-ups |
 | `HF_TOKEN` | none | Faster model downloads |

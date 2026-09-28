@@ -102,3 +102,25 @@ def test_muted_text_is_not_shown(capsys):
     view(TextDelta("HEARTBEAT_OK"))
     assert view.end_turn() is False
     assert capsys.readouterr().out == ""
+
+
+def test_hitting_the_step_limit_asks_eva_for_a_summary_once():
+    from types import SimpleNamespace
+
+    from eva.application.messages import STEP_LIMIT_MESSAGE
+    from eva.domain.models import StepLimitReached
+
+    class ExhaustedSession:
+        def send(self, message):
+            raise StepLimitReached
+
+    async def scenario():
+        app = SimpleNamespace(session=ExhaustedSession())
+        terminal = Terminal(app=app, console=Console(), transcriber=None, player=SilentPlayer(), heartbeat=None)
+        terminal._loop = asyncio.get_running_loop()
+        terminal._take(Turn(TurnKind.USER, "explore everything"))
+        terminal._take(Turn(TurnKind.SYSTEM, STEP_LIMIT_MESSAGE))
+        await asyncio.sleep(0)
+        return [terminal._turns.get_nowait() for _ in range(terminal._turns.qsize())]
+
+    assert asyncio.run(scenario()) == [Turn(TurnKind.SYSTEM, STEP_LIMIT_MESSAGE)]

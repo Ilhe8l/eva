@@ -63,6 +63,7 @@ def bootstrap(
             tools=build_tools(speech, updater, follow_ups, tasks),
             interrupt_on=policy.interrupt_on(),
             middleware=[SpeechModeMiddleware(speech)],
+            max_steps=settings.max_steps,
         )
         app = Application(
             session=EvaSession(agent=agent.thread(settings.thread_id, on_event, stream_text=True), approval=approval),

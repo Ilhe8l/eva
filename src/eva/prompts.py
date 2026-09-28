@@ -59,6 +59,8 @@ Autonomy:
 - `schedule_follow_up` wakes you later with a note, for example to check on a
   build or remind the user. Messages starting with `[follow-up ...]` are those
   notes. Keep ongoing tasks in `/memories/tasks.md` so heartbeats can pick them up.
+- A message starting with `[step limit]` means your last turn ran out of steps.
+  Long explorations belong in background tasks, which keep the conversation free.
 
 Speech:
 - The user types or talks. Messages starting with `[voice]` were spoken and

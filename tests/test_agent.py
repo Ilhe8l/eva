@@ -15,7 +15,7 @@ from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
 from eva.application.session import EvaSession
 from eva.application.tasks import TaskBoard
-from eva.domain.models import Speech, TextDelta, ToolUse, TurnCancelled
+from eva.domain.models import Speech, StepLimitReached, TextDelta, ToolUse, TurnCancelled
 
 
 class ScriptedModel(GenericFakeChatModel):
@@ -39,7 +39,7 @@ def make_agent(tmp_path):
     project.mkdir()
     (project / "notes.txt").write_text("keep me\n")
 
-    def make(*messages, events=None, speech=None, policy=None):
+    def make(*messages, events=None, speech=None, policy=None, max_steps=500):
         model = ScriptedModel(messages=iter([*messages, AIMessage(content="All done.")]), prompts=[])
         make.models.append(model)
         speech = speech or SpeechChannel()
@@ -52,6 +52,7 @@ def make_agent(tmp_path):
             tools=build_tools(speech, SelfUpdater(project), FollowUpStore(tmp_path / "f.json"), tasks),
             interrupt_on=(policy or ApprovalPolicy()).interrupt_on(),
             middleware=[SpeechModeMiddleware(speech)],
+            max_steps=max_steps,
         )
         make.tasks = tasks
         make.adapter = adapter
@@ -242,3 +243,14 @@ def test_main_thread_streams_reply_text(make_agent):
     streaming.ask("hi")
     text = "".join(event.text for event in events if isinstance(event, TextDelta))
     assert text == "Hello there, friend."
+
+
+def test_running_out_of_steps_stops_the_turn_cleanly(make_agent):
+    make, _, _ = make_agent
+    calls = [
+        AIMessage(content="", tool_calls=[{"name": "execute", "args": {"command": "ls"}, "id": f"ls-{index}"}])
+        for index in range(20)
+    ]
+    agent = make(*calls, max_steps=12)
+    with pytest.raises(StepLimitReached):
+        agent.ask("explore everything")

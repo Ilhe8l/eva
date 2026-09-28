@@ -3,6 +3,17 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## Running out of steps ends a turn with a report
+
+A LangGraph run stops after `recursion_limit` graph steps, and one tool call
+takes a few of them. Long autonomous work used to hit the old limit of 150
+and end with a raw `GraphRecursionError`. The limit is now `EVA_MAX_STEPS`
+(default 500). When a turn still runs out, the adapter raises
+`StepLimitReached`, and the terminal sends Eva a `[step limit]` message so she
+summarizes what she did and asks whether to continue. She is asked once, never
+in a loop. The conversation is checkpointed, so "continue" picks up where she
+stopped. A background task that runs out reports it as its result.
+
 ## A local setup for a 6 GB GPU
 
 Measured with Qwen3.5-4B (Q4_K_M) served by LM Studio, next to Whisper and

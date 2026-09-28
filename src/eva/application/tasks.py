@@ -9,7 +9,7 @@ from enum import Enum
 
 from eva.application.messages import background_brief
 from eva.application.session import EvaSession
-from eva.domain.models import TurnCancelled
+from eva.domain.models import StepLimitReached, TurnCancelled
 
 MAX_RUNNING = 3
 
@@ -86,6 +86,9 @@ class TaskBoard:
             task.status = TaskStatus.DONE
         except TurnCancelled:
             task.report, task.status = "Cancelled before finishing.", TaskStatus.CANCELLED
+        except StepLimitReached:
+            task.report = "Stopped at the step limit before finishing; the work so far is in its thread."
+            task.status = TaskStatus.FAILED
         except Exception as exc:  # noqa: BLE001 - a failed task is reported, not raised
             task.report, task.status = f"Failed: {exc}", TaskStatus.FAILED
         self.on_finish(task)

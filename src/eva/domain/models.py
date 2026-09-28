@@ -55,3 +55,7 @@ AgentEvent = Speech | ToolUse | TextDelta
 
 class TurnCancelled(Exception):
     """The user or Eva stopped a turn before it finished."""
+
+
+class StepLimitReached(Exception):
+    """A turn used all the graph steps it was allowed and stopped unfinished."""

@@ -16,6 +16,7 @@ class Settings:
     thread_id: str = "main"
     heartbeat_minutes: float = 30
     autonomous: bool = False
+    max_steps: int = 500
 
     @classmethod
     def from_env(cls, model: str | None = None) -> "Settings":
@@ -34,4 +35,5 @@ class Settings:
             thread_id=os.getenv("EVA_THREAD_ID", cls.thread_id),
             heartbeat_minutes=float(os.getenv("EVA_HEARTBEAT_MINUTES", cls.heartbeat_minutes)),
             autonomous=os.getenv("EVA_AUTONOMOUS", "").strip().lower() in {"1", "true", "yes", "on"},
+            max_steps=int(os.getenv("EVA_MAX_STEPS", cls.max_steps)),
         )
