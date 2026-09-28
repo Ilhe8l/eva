@@ -247,7 +247,7 @@ class WhisperTranscriber:
 
         _load_cublas_12()
         try:
-            model = model_class(self.model_name, device="cuda", compute_type="float16")
+            model = model_class(self.model_name, device="cuda", compute_type="int8_float16")
             segments, _ = model.transcribe(np.zeros(MICROPHONE_SAMPLE_RATE, dtype=np.float32), language="en")
             list(segments)  # runs the encoder now, so missing CUDA libraries fail here
         except (RuntimeError, ValueError) as exc:
