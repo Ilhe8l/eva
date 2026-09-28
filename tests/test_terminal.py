@@ -1,9 +1,10 @@
 import asyncio
+import re
 
 import pytest
 
 from eva.domain.models import TextDelta
-from eva.terminal import Console, ProgressView, Terminal, Turn, TurnKind, in_daemon_thread, summarize
+from eva.terminal import Console, ProgressView, Terminal, Turn, TurnKind, in_daemon_thread, split_blocks, summarize
 
 
 def test_worker_thread_questions_are_answered_by_the_next_line():
@@ -75,14 +76,24 @@ def test_enter_stops_a_recording_and_sends_the_transcript(tmp_path):
     assert turn == Turn(TurnKind.USER, "[voice] olá, eva")
 
 
-def test_reply_text_is_printed_line_by_line(capsys):
+def plain(text):
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+def test_reply_markdown_is_rendered_block_by_block(capsys):
     view = ProgressView(player=SilentPlayer())
-    for piece in ["Hello", " there.\nSecond", " line"]:
+    for piece in ["Hello **the", "re**.\n", "\n- one\n- two"]:
         view(TextDelta(piece))
-    assert capsys.readouterr().out == "\nEva> Hello there.\n"
+    assert plain(capsys.readouterr().out) == "\nEva> Hello there.\n"
     assert view.end_turn() is True
-    assert capsys.readouterr().out == "Second line\n"
+    assert [line.strip() for line in plain(capsys.readouterr().out).splitlines()] == ["• one", "• two"]
     assert view.end_turn() is False
+
+
+def test_code_blocks_are_not_split_at_blank_lines():
+    blocks, rest = split_blocks("Intro.\n\n```py\nx = 1\n\ny = 2\n```\n\nOutro")
+    assert blocks == ["Intro.", "```py\nx = 1\n\ny = 2\n```"]
+    assert rest == "Outro"
 
 
 def test_muted_text_is_not_shown(capsys):

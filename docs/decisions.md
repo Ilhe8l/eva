@@ -21,11 +21,14 @@ noise.
 ## The reply streams as it is written
 
 The main thread adds `messages` to its stream modes. Text chunks from the
-top-level `model` node become `TextDelta` events, and the terminal prints them
-line by line (prompt_toolkit redraws the input line on each write, so partial
-lines would be torn apart). The final reply is not printed again once it was
-streamed. Background tasks do not stream, because only their report matters.
-Heartbeat turns are muted, so an idle `HEARTBEAT_OK` never shows.
+top-level `model` node become `TextDelta` events. The terminal renders the
+reply as Markdown with `rich`, one block at a time: a paragraph, list or code
+block is printed as soon as it is complete. Half-written Markdown does not
+render, and prompt_toolkit redraws the input line on every write, so partial
+lines would be torn apart. Models write Markdown naturally, so Eva is not told
+to avoid it. The final reply is not printed again once it was streamed.
+Background tasks do not stream, because only their report matters. Heartbeat
+turns are muted, so an idle `HEARTBEAT_OK` never shows.
 
 ## Steering: messages reach Eva mid-task
 

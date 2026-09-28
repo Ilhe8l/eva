@@ -805,6 +805,7 @@ dependencies = [
     { name = "pillow" },
     { name = "prompt-toolkit" },
     { name = "python-dotenv" },
+    { name = "rich" },
 ]
 
 [package.optional-dependencies]
@@ -840,6 +841,7 @@ requires-dist = [
     { name = "prompt-toolkit", specifier = ">=3.0.50,<4" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" },
     { name = "python-dotenv", specifier = ">=1.2" },
+    { name = "rich", specifier = ">=14" },
     { name = "sounddevice", marker = "extra == 'voice'", specifier = ">=0.5,<1" },
     { name = "soundfile", marker = "extra == 'voice'", specifier = ">=0.13,<1" },
 ]

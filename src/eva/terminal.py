@@ -9,6 +9,8 @@ follow-ups and heartbeats.
 import asyncio
 import contextlib
 import difflib
+import io
+import shutil
 import sys
 import threading
 from collections.abc import Callable
@@ -19,6 +21,8 @@ from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
+from rich.console import Console as RichConsole
+from rich.markdown import Markdown
 
 from eva.adapters.notifier import DesktopNotifier
 from eva.adapters.policy import ApprovalPolicy
@@ -179,16 +183,17 @@ def _preview(text: str) -> str:
 
 
 class ProgressView:
-    """Shows what Eva is doing, writes her reply as it arrives, and plays what she says.
+    """Shows what Eva is doing, renders her reply as it arrives, and plays what she says.
 
-    Reply text is printed line by line: the input line is redrawn on every write,
-    so partial lines would be torn apart.
+    The reply is Markdown, rendered one block (paragraph, list, code block) at a
+    time: a block is printed once it is complete, because half-written Markdown
+    does not render, and the input line is redrawn on every write.
     """
 
     def __init__(self, player: SpeechPlayer) -> None:
         self.player = player
         self.muted = False  # set while a heartbeat runs, so HEARTBEAT_OK never shows
-        self._line = ""
+        self._pending = ""
         self._streamed = False
         self._lock = threading.Lock()
 
@@ -214,18 +219,49 @@ class ProgressView:
             return streamed
 
     def _write(self, text: str) -> None:
-        if not self._streamed:
-            print()
-            self._line = "Eva> "
-            self._streamed = True
-        *lines, self._line = (self._line + text).split("\n")
-        for line in lines:
-            print(line)
+        blocks, self._pending = split_blocks(self._pending + text)
+        for block in blocks:
+            self._print_block(block)
 
     def _flush(self) -> None:
-        if self._line.strip() and self._line != "Eva> ":
-            print(self._line)
-        self._line = ""
+        if self._pending.strip():
+            self._print_block(self._pending)
+        self._pending = ""
+
+    def _print_block(self, block: str) -> None:
+        prefix = "" if self._streamed else "Eva> "
+        if not self._streamed:
+            print()
+            self._streamed = True
+        print(render_markdown(block, prefix))
+
+
+def split_blocks(text: str) -> tuple[list[str], str]:
+    """Complete Markdown blocks in `text`, and the unfinished rest.
+
+    A block ends at a blank line, except inside a fenced code block.
+    """
+    blocks, current, in_fence = [], [], False
+    lines = text.split("\n")
+    for line in lines[:-1]:
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        if not line.strip() and not in_fence:
+            if current:
+                blocks.append("\n".join(current))
+            current = []
+        else:
+            current.append(line)
+    return blocks, "\n".join([*current, lines[-1]])
+
+
+def render_markdown(text: str, prefix: str = "") -> str:
+    """ANSI-rendered Markdown, with `prefix` put in front of the first line."""
+    width = shutil.get_terminal_size((100, 24)).columns
+    console = RichConsole(file=io.StringIO(), force_terminal=True, width=width - len(prefix))
+    console.print(Markdown(text.strip()), end="")
+    lines = [line.rstrip() for line in console.file.getvalue().strip("\n").split("\n")]
+    return prefix + "\n".join(lines)
 
 
 def speaker_label(source: str | None) -> str:
@@ -381,7 +417,7 @@ class Terminal:
         if reply is None:
             return
         if not streamed:
-            print(f"\nEva> {reply}")
+            print(f"\n{render_markdown(reply, 'Eva> ')}")
         if session.denied_actions:
             print(f"[Declined: {', '.join(session.denied_actions)}]")
         if turn.kind is TurnKind.USER:

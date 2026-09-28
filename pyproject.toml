@@ -28,6 +28,7 @@ dependencies = [
     "pillow>=12.3",  # image and video frames for multimodal read_file
     "prompt-toolkit>=3.0.50,<4",
     "python-dotenv>=1.2",
+    "rich>=14",
 ]
 
 [project.urls]
