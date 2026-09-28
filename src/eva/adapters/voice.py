@@ -6,6 +6,7 @@ https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md).
 Heavy imports are deferred so a text-only install still works.
 """
 
+import contextlib
 import ctypes
 import importlib.util
 import queue
@@ -145,6 +146,8 @@ class Speaker(Protocol):
 
     def speak(self, text: str) -> None: ...
 
+    def stop(self) -> None: ...
+
 
 class KokoroSpeaker:
     """Kokoro-82M: small, fast (~40x real time on a consumer GPU), streams by sentence."""
@@ -153,6 +156,8 @@ class KokoroSpeaker:
         self.voice = voice
         self.language = language
         self._pipeline = None
+        self._stopped = threading.Event()
+        self._player: subprocess.Popen | None = None
 
     def warm_up(self) -> None:
         """Load the model and run CUDA kernels once, so the first reply is not slow."""
@@ -161,8 +166,15 @@ class KokoroSpeaker:
 
     def speak(self, text: str) -> None:
         """Play `text`, starting with the first sentence while the rest is synthesized."""
+        self._stopped.clear()
         if text.strip():
-            _stream(self._synthesize(text), KOKORO_SAMPLE_RATE)
+            self._play(self._synthesize(text))
+
+    def stop(self) -> None:
+        """Cut the current utterance short; safe to call from any thread."""
+        self._stopped.set()
+        if (player := self._player) is not None:
+            player.terminate()
 
     def _synthesize(self, text: str) -> Iterator:
         if self._pipeline is None:
@@ -174,30 +186,39 @@ class KokoroSpeaker:
 
                 self._pipeline = KPipeline(lang_code=self.language, repo_id=KOKORO_REPO)
         for _, _, audio in self._pipeline(text, voice=self.voice):
+            if self._stopped.is_set():
+                return
             yield audio.numpy()
 
+    def _play(self, chunks: Iterator) -> None:
+        """Stream float32 mono audio to the sound server, falling back to PortAudio."""
+        command = _player_command(KOKORO_SAMPLE_RATE)
+        if command is None:
+            import sounddevice as sd
 
-def _stream(chunks: Iterator, sample_rate: int) -> None:
-    """Stream float32 mono audio to the sound server, falling back to PortAudio."""
+            with sd.OutputStream(samplerate=KOKORO_SAMPLE_RATE, channels=1, dtype="float32") as stream:
+                for chunk in chunks:
+                    stream.write(chunk)
+            return
+        self._player = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        try:
+            for chunk in chunks:
+                self._player.stdin.write(chunk.astype("float32").tobytes())
+        except BrokenPipeError:
+            pass  # stopped mid-sentence
+        finally:
+            with contextlib.suppress(BrokenPipeError):
+                self._player.stdin.close()
+            self._player.wait()
+            self._player = None
+
+
+def _player_command(sample_rate: int) -> list[str] | None:
     players = (
         ("paplay", ["--raw", "--format=float32le", f"--rate={sample_rate}", "--channels=1"]),
         ("aplay", ["-q", "-t", "raw", "-f", "FLOAT_LE", "-r", str(sample_rate), "-c", "1"]),
     )
-    command = next(([path, *flags] for name, flags in players if (path := shutil.which(name))), None)
-    if command is None:
-        import sounddevice as sd
-
-        with sd.OutputStream(samplerate=sample_rate, channels=1, dtype="float32") as stream:
-            for chunk in chunks:
-                stream.write(chunk)
-        return
-    process = subprocess.Popen(command, stdin=subprocess.PIPE)
-    try:
-        for chunk in chunks:
-            process.stdin.write(chunk.astype("float32").tobytes())
-    finally:
-        process.stdin.close()
-        process.wait()
+    return next(([path, *flags] for name, flags in players if (path := shutil.which(name))), None)
 
 
 class SpeechPlayer:
@@ -207,16 +228,29 @@ class SpeechPlayer:
         self._speaker = speaker
         self._on_error = on_error
         self._queue: queue.Queue[Callable[[], None]] = queue.Queue()
+        self._generation = 0  # bumped by stop(), so sentences queued before it are skipped
         threading.Thread(target=self._work, daemon=True, name="eva-speech").start()
 
     def warm_up(self) -> None:
         self._queue.put(self._speaker.warm_up)
 
     def play(self, text: str) -> None:
-        self._queue.put(lambda: self._speaker.speak(text))
+        generation = self._generation
+        self._queue.put(lambda: generation == self._generation and self._speaker.speak(text))
 
     def wait(self) -> None:
         self._queue.join()
+
+    def stop(self) -> None:
+        """Drop everything queued and cut off what is playing now."""
+        self._generation += 1
+        while True:
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+            self._queue.task_done()
+        self._speaker.stop()
 
     def _work(self) -> None:
         while True:

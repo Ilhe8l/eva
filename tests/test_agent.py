@@ -9,10 +9,12 @@ from eva.adapters.agent import DeepAgentAdapter, Workspace
 from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
 from eva.adapters.policy import approval_rules
-from eva.adapters.speech_mode import SPEECH_OFF, SPEECH_ON, SpeechModeMiddleware
+from eva.adapters.speech_mode import PROGRESS_NUDGE, SPEECH_OFF, SPEECH_ON, SpeechModeMiddleware
 from eva.adapters.tools import build_tools
 from eva.adapters.voice import SpeechChannel
-from eva.domain.models import Speech, ToolUse
+from eva.application.session import EvaSession
+from eva.application.tasks import TaskBoard
+from eva.domain.models import Speech, ToolUse, TurnCancelled
 
 
 class ScriptedModel(GenericFakeChatModel):
@@ -39,16 +41,20 @@ def make_agent(tmp_path):
     def make(*messages, events=None, speech=None):
         model = ScriptedModel(messages=iter([*messages, AIMessage(content="All done.")]), prompts=[])
         make.models.append(model)
-        return DeepAgentAdapter(
+        speech = speech or SpeechChannel()
+        on_event = events.append if events is not None else lambda event: None
+        tasks = TaskBoard(lambda task: EvaSession(adapter.thread(f"task-{task.id}", on_event, f"task {task.id}"), None))
+        adapter = DeepAgentAdapter(
             model,
             Workspace(project, tmp_path / "data"),
             InMemorySaver(),
-            "test",
-            tools=build_tools(speech or SpeechChannel(), SelfUpdater(project), FollowUpStore(tmp_path / "f.json")),
+            tools=build_tools(speech, SelfUpdater(project), FollowUpStore(tmp_path / "f.json"), tasks),
             interrupt_on=approval_rules(),
-            middleware=[SpeechModeMiddleware(speech or SpeechChannel())],
-            on_event=events.append if events is not None else lambda event: None,
+            middleware=[SpeechModeMiddleware(speech)],
         )
+        make.tasks = tasks
+        make.adapter = adapter
+        return adapter.thread("test", on_event)
 
     make.models = []
     return make, project, tmp_path / "data" / "memory"
@@ -94,7 +100,7 @@ def test_speech_and_tool_use_stream_before_the_reply(make_agent):
 
 
 def _skill_names(agent):
-    return {skill["name"] for skill in agent._agent.get_state(agent.config).values.get("skills_metadata") or []}
+    return {skill["name"] for skill in agent._graph.get_state(agent.config).values.get("skills_metadata") or []}
 
 
 def test_skills_written_mid_session_appear_on_the_next_message(make_agent, tmp_path):
@@ -122,7 +128,7 @@ def test_forgetting_the_last_turn_keeps_earlier_ones(make_agent):
     agent.ask("hello")
     agent.ask("heartbeat")
     agent.forget_last_turn()
-    messages = agent._agent.get_state(agent.config).values["messages"]
+    messages = agent._graph.get_state(agent.config).values["messages"]
     assert [message.content for message in messages] == ["hello", "Hi."]
 
 
@@ -136,3 +142,43 @@ def test_model_is_told_whether_speech_is_on(make_agent):
     first, second = make.models[-1].prompts
     assert SPEECH_OFF in first and SPEECH_ON not in first
     assert SPEECH_ON in second
+
+
+def test_silent_work_triggers_a_spoken_progress_nudge(make_agent):
+    make, _, _ = make_agent
+    speech = SpeechChannel()
+    speech.enabled = True
+    ls = lambda index: AIMessage(content="", tool_calls=[{"name": "execute", "args": {"command": "ls"}, "id": f"ls-{index}"}])
+    agent = make(*(ls(index) for index in range(4)), speech=speech)
+    agent.ask("dig around")
+    prompts = make.models[-1].prompts
+    assert [PROGRESS_NUDGE in prompt for prompt in prompts] == [False, False, False, True, True]
+
+
+def test_stop_cancels_the_turn_at_the_next_step(make_agent):
+    make, _, _ = make_agent
+    holder = {}
+
+    def cancel_on_first_tool(event):
+        if isinstance(event, ToolUse):
+            holder["agent"].cancel()
+
+    agent = make(_call("execute", command="ls"), _call("execute", command="pwd"), events=[])
+    agent.on_event = cancel_on_first_tool
+    holder["agent"] = agent
+    with pytest.raises(TurnCancelled):
+        agent.ask("look around")
+
+
+def test_threads_share_the_graph_but_not_the_history(make_agent):
+    make, _, _ = make_agent
+    main = make(AIMessage(content="Main."), AIMessage(content="Task."))
+    task = make.adapter.thread("task-1")
+    main.ask("hello main")
+    task.ask("hello task")
+
+    def contents(thread):
+        return [message.content for message in thread._graph.get_state(thread.config).values["messages"]]
+
+    assert contents(main) == ["hello main", "Main."]
+    assert contents(task) == ["hello task", "Task."]

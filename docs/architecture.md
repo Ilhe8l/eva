@@ -22,7 +22,9 @@ voice models stay in adapters.
 
 ## Agent
 
-`DeepAgentAdapter` wraps `create_deep_agent` and uses:
+`DeepAgentAdapter` compiles one `create_deep_agent` graph, and each
+`AgentThread` runs one checkpointed conversation on it: the main one, plus one
+per background task (`application/tasks.py`). The graph uses:
 
 - a `CompositeBackend` built by `Workspace`: the project at `/` (with shell
   execution), the journal at `/memories/`, Eva's skills at `/skills/` and
@@ -34,8 +36,8 @@ voice models stay in adapters.
 - a SQLite checkpointer, so a turn paused for approval, and the whole
   conversation, survive restarts.
 
-The graph is built once per session. The adapter streams each run and
-reports tool use and chosen speech as events.
+Each thread streams its runs and reports tool use and chosen speech as
+events, labeled with their source.
 
 ## Trust boundaries
 

@@ -7,8 +7,9 @@ https://docs.langchain.com/oss/python/deepagents/streaming
 """
 
 import os
+import threading
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from deepagents import create_deep_agent
@@ -21,7 +22,7 @@ from langgraph.types import Checkpointer, Command
 
 from eva.adapters.policy import BUILTIN_SKILLS_ROUTE, MEMORY_ROUTE, SKILLS_ROUTE
 from eva.adapters.voice import SPEECH_EVENT
-from eva.domain.models import ActionRequest, AgentEvent, AgentStep, Speech, ToolUse
+from eva.domain.models import ActionRequest, AgentEvent, AgentStep, Speech, ToolUse, TurnCancelled
 from eva.prompts import build_system_prompt
 
 BUILTIN_SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
@@ -83,21 +84,18 @@ def _shell_env() -> dict[str, str]:
 
 
 class DeepAgentAdapter:
+    """The compiled Deep Agents graph, shared by every conversation thread."""
+
     def __init__(
         self,
         model: BaseChatModel,
         workspace: Workspace,
         checkpointer: Checkpointer,
-        thread_id: str,
         tools: Sequence[BaseTool],
         interrupt_on: dict[str, InterruptOnConfig],
         middleware: Sequence[AgentMiddleware] = (),
-        on_event: Callable[[AgentEvent], None] = lambda event: None,
     ) -> None:
-        self.on_event = on_event
-        self.config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 150}
-        self._pending: list[tuple[str, int]] = []
-        self._agent = create_deep_agent(
+        self.graph = create_deep_agent(
             model=model,
             tools=list(tools),
             system_prompt=workspace.system_prompt(),
@@ -110,7 +108,32 @@ class DeepAgentAdapter:
             name="eva",
         )
 
+    def thread(
+        self,
+        thread_id: str,
+        on_event: Callable[[AgentEvent], None] = lambda event: None,
+        source: str | None = None,
+    ) -> "AgentThread":
+        return AgentThread(self.graph, thread_id, on_event, source)
+
+
+class AgentThread:
+    """One checkpointed conversation. Threads run the same graph concurrently.
+
+    `source` labels everything this thread reports, so the terminal can tell a
+    background task from the main conversation.
+    """
+
+    def __init__(self, graph, thread_id: str, on_event: Callable[[AgentEvent], None], source: str | None) -> None:
+        self._graph = graph
+        self.config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 150}
+        self.on_event = on_event
+        self.source = source
+        self._pending: list[tuple[str, int]] = []
+        self._cancelled = threading.Event()
+
     def ask(self, message: str) -> AgentStep:
+        self._cancelled.clear()
         # A None skills_metadata makes SkillsMiddleware rescan, so new skills appear.
         return self._run({"messages": [{"role": "user", "content": message}], "skills_metadata": None})
 
@@ -124,25 +147,31 @@ class DeepAgentAdapter:
             start += count
         return self._run(Command(resume=resume))
 
+    def cancel(self) -> None:
+        """Stop the running turn at its next step; a tool already running finishes first."""
+        self._cancelled.set()
+
     def forget_last_turn(self) -> None:
         """Remove the latest user message and everything after it from the thread."""
-        messages = self._agent.get_state(self.config).values.get("messages", [])
+        messages = self._graph.get_state(self.config).values.get("messages", [])
         starts = [index for index, message in enumerate(messages) if isinstance(message, HumanMessage)]
         if starts:
             removals = [RemoveMessage(id=message.id) for message in messages[starts[-1] :]]
-            self._agent.update_state(self.config, {"messages": removals})
+            self._graph.update_state(self.config, {"messages": removals})
 
     def _run(self, payload) -> AgentStep:
-        for chunk in self._agent.stream(
+        for chunk in self._graph.stream(
             payload,
             config=self.config,
             stream_mode=["updates", "custom"],
             subgraphs=True,
             version="v2",
         ):
+            if self._cancelled.is_set():
+                raise TurnCancelled
             for event in _events(chunk):
-                self.on_event(event)
-        return self._step(self._agent.get_state(self.config))
+                self.on_event(replace(event, source=self.source))
+        return self._step(self._graph.get_state(self.config))
 
     def _step(self, state) -> AgentStep:
         self._pending = []
@@ -150,7 +179,7 @@ class DeepAgentAdapter:
         for interrupt in state.interrupts:
             requests = interrupt.value["action_requests"]
             self._pending.append((interrupt.id, len(requests)))
-            actions.extend(ActionRequest(name=item["name"], arguments=item["args"]) for item in requests)
+            actions.extend(ActionRequest(item["name"], item["args"], self.source) for item in requests)
         if actions:
             return AgentStep(reply=None, pending_actions=tuple(actions))
         return AgentStep(reply=_text(state.values["messages"][-1].content))
@@ -171,6 +200,7 @@ def _events(chunk: dict) -> list[AgentEvent]:
                     ToolUse(call["name"], call["args"]) for call in message.tool_calls if call["name"] not in SILENT_TOOLS
                 )
     return events
+
 
 def _text(content: str | list) -> str:
     if isinstance(content, str):

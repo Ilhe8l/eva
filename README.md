@@ -37,10 +37,14 @@ microphone and speakers. It uses the GPU when one is available.
 | any text | Talk to Eva |
 | `:record` | Talk; press Enter to stop. The transcript is shown and sent |
 | `:speak on` / `:speak off` | Let Eva speak aloud |
+| `:shh` | Stop talking now |
+| `:stop` | Stop what Eva is doing, at the next step |
+| `:tasks` / `:cancel ID` | List / stop background tasks |
 | `:quit` | Exit and save a session summary |
 
 You can keep typing while Eva works; your message reaches her after her
-current task. After `EVA_HEARTBEAT_MINUTES` of silence (default 30), she checks
+current task. For long jobs she starts background tasks, keeps talking with you
+while they run, and tells you when they finish. After `EVA_HEARTBEAT_MINUTES` of silence (default 30), she checks
 her journal and may act on her own. She can also schedule follow-ups for
 herself.
 

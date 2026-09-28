@@ -22,3 +22,17 @@ RESUMED_MESSAGE = "[restart] You were just restarted with your edited source. Co
 
 def voice_message(transcript: str) -> str:
     return f"[voice] {transcript}"
+
+
+def background_brief(task_id: str, title: str, instructions: str) -> str:
+    return (
+        f"[background task {task_id}: {title}] You are running in the background while the user keeps "
+        "talking to you in the main conversation, which you cannot see. Work on this autonomously:\n"
+        f"{instructions}\n"
+        "Give short spoken progress updates on long work. Finish with a concise report of what you did "
+        "and found; it is handed to the main conversation."
+    )
+
+
+def task_report_message(task_id: str, title: str, status: str, report: str) -> str:
+    return f"[background task {task_id} '{title}' {status}] {report}\nTell the user the outcome briefly."

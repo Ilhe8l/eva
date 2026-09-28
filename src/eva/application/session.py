@@ -25,6 +25,9 @@ class EvaSession:
             step = self.agent.resume(self._decide(step))
         raise RuntimeError("Too many approval rounds in one turn")
 
+    def cancel(self) -> None:
+        self.agent.cancel()
+
     def heartbeat(self, now: datetime) -> str | None:
         """Let Eva act on her own; return her reply, or None if she had nothing to do.
 

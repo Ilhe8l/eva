@@ -1,4 +1,8 @@
-"""Values crossing Eva's application boundaries."""
+"""Values crossing Eva's application boundaries.
+
+`source` names the background task that produced a value; None is the main
+conversation.
+"""
 
 from dataclasses import dataclass
 from typing import Any
@@ -10,6 +14,7 @@ class ActionRequest:
 
     name: str
     arguments: dict[str, Any]
+    source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -22,9 +27,10 @@ class AgentStep:
 
 @dataclass(frozen=True)
 class Speech:
-    """A sentence Eva chose to say aloud while working."""
+    """Words Eva chose to say aloud while working."""
 
     text: str
+    source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -33,6 +39,11 @@ class ToolUse:
 
     name: str
     arguments: dict[str, Any]
+    source: str | None = None
 
 
 AgentEvent = Speech | ToolUse
+
+
+class TurnCancelled(Exception):
+    """The user or Eva stopped a turn before it finished."""

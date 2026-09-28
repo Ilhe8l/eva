@@ -1,8 +1,9 @@
 """Terminal interface.
 
-Eva works on a background thread while the user keeps typing. The keyboard
-has a single reader (`Console`), shared by messages and approval answers. A
-clock wakes Eva for follow-ups and heartbeats.
+Eva works on a background thread while the user keeps typing, and background
+tasks run on threads of their own. The keyboard has a single reader
+(`Console`), shared by messages and approval answers. A clock wakes Eva for
+follow-ups and heartbeats.
 """
 
 import asyncio
@@ -20,12 +21,16 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
 from eva.adapters.voice import Microphone, SpeechPlayer, WhisperTranscriber
-from eva.application.messages import RESUMED_MESSAGE, follow_up_message, voice_message
+from eva.application.messages import RESUMED_MESSAGE, follow_up_message, task_report_message, voice_message
+from eva.application.tasks import BackgroundTask
 from eva.bootstrap import Application
-from eva.domain.models import ActionRequest, AgentEvent, Speech, ToolUse
+from eva.domain.models import ActionRequest, AgentEvent, Speech, ToolUse, TurnCancelled
 
 YES = {"y", "yes", "s", "sim"}
-HELP = "Commands: :record (talk, then press Enter), :speak on|off, :quit"
+HELP = (
+    "Commands: :record (talk, then Enter), :speak on|off, :shh (stop talking), "
+    ":stop (stop working), :tasks, :cancel ID, :quit"
+)
 PREVIEW_LINES = 40
 SUMMARY_WIDTH = 100
 TICK_SECONDS = 15
@@ -66,6 +71,7 @@ class Console:
         self._answer: asyncio.Future[str] | None = None
         self._question = ""
         self._closed = False
+        self._asking = threading.Lock()  # one question at a time, even from parallel tasks
 
     def bind(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -85,14 +91,21 @@ class Console:
         self._answer.set_result(line)
         return True
 
-    def ask(self, question: str) -> str:
-        """Ask from a worker thread and block until the user answers."""
-        if self._closed or self._loop is None:
-            return ""
-        try:
-            return asyncio.run_coroutine_threadsafe(self._ask(question), self._loop).result()
-        except (RuntimeError, asyncio.CancelledError):
-            return ""
+    def ask(self, question: str, context: str = "") -> str:
+        """Ask from a worker thread and block until the user answers.
+
+        `context` is printed right before the question, inside the same turn,
+        so parallel tasks never interleave their prompts.
+        """
+        with self._asking:
+            if self._closed or self._loop is None:
+                return ""
+            if context:
+                print(context)
+            try:
+                return asyncio.run_coroutine_threadsafe(self._ask(question), self._loop).result()
+            except (RuntimeError, asyncio.CancelledError):
+                return ""
 
     def close(self) -> None:
         self._closed = True
@@ -121,8 +134,8 @@ class ConsoleApproval:
         self.console = console
 
     def approve(self, action: ActionRequest) -> bool:
-        print(f"\n── Eva wants to run {action.name} ──\n{describe(action)}")
-        return self.console.ask("Approve? [y/N] ").strip().lower() in YES
+        header = f"\n── {speaker_label(action.source)} wants to run {action.name} ──"
+        return self.console.ask("Approve? [y/N] ", context=f"{header}\n{describe(action)}").strip().lower() in YES
 
 
 def describe(action: ActionRequest) -> str:
@@ -160,11 +173,15 @@ class ProgressView:
 
     def __call__(self, event: AgentEvent) -> None:
         match event:
-            case Speech(text):
-                print(f"\nEva (aloud)> {text}")
+            case Speech(text, source):
+                print(f"\n{speaker_label(source)} (aloud)> {text}")
                 self.player.play(text)
-            case ToolUse(name, arguments):
-                print(f"  · {summarize(name, arguments)}")
+            case ToolUse(name, arguments, source):
+                print(f"  {'[' + source + '] ' if source else ''}· {summarize(name, arguments)}")
+
+
+def speaker_label(source: str | None) -> str:
+    return f"Eva [{source}]" if source else "Eva"
 
 
 def summarize(name: str, arguments: dict) -> str:
@@ -213,13 +230,16 @@ class Terminal:
         return self.app.updater.restart_requested
 
     async def run(self, resumed: bool = False) -> None:
-        self.console.bind(asyncio.get_running_loop())
+        loop = asyncio.get_running_loop()
+        self.console.bind(loop)
+        self.app.tasks.on_finish = lambda task: loop.call_soon_threadsafe(self._task_finished, task)
         print(f"Eva is ready. {HELP}")
         if resumed:
             await self._turns.put(Turn(TurnKind.SYSTEM, RESUMED_MESSAGE))
         with patch_stdout(raw=True):
             tasks = [asyncio.create_task(job) for job in (self._read(), self._work(), self._tick())]
             await self._stop.wait()
+            self.app.tasks.on_finish = lambda task: None  # the loop is about to close
             self.console.close()
             for task in tasks:
                 task.cancel()
@@ -246,6 +266,11 @@ class Terminal:
         if self._busy:
             print("(Eva will read this after her current task.)")
         await self._turns.put(Turn(TurnKind.USER, message))
+
+    def _task_finished(self, task: BackgroundTask) -> None:
+        print(f"\n[task {task.id} {task.status.value}: {task.title}]")
+        report = task_report_message(task.id, task.title, task.status.value, task.report)
+        self._turns.put_nowait(Turn(TurnKind.SYSTEM, report))
 
     async def _work(self) -> None:
         while True:
@@ -278,6 +303,9 @@ class Terminal:
                 reply = session.heartbeat(now())
             else:
                 reply = session.send(turn.message)
+        except TurnCancelled:
+            print("(Stopped.)")
+            return
         except Exception as exc:  # noqa: BLE001 - keep Eva alive on model errors
             print(f"Eva error: {exc}")
             return
@@ -293,9 +321,21 @@ class Terminal:
         name, _, argument = line.partition(" ")
         argument = argument.strip()
         if name == ":record":
+            self.player.stop()  # the user starts talking: Eva stops
             # Record in the background: the keyboard reader must stay free to see Enter.
             if self._recording is None or self._recording.done():
                 self._recording = asyncio.create_task(self._record())
+        elif name == ":shh":
+            self.player.stop()
+        elif name == ":stop":
+            self.player.stop()
+            self.app.session.cancel()
+            print("Stopping after the current step..." if self._busy else "Nothing to stop.")
+        elif name == ":tasks":
+            tasks = self.app.tasks.all()
+            print("\n".join(f"  {task.id} [{task.status.value}] {task.title}" for task in tasks) or "No tasks.")
+        elif name == ":cancel" and argument:
+            print("Cancelling..." if self.app.tasks.cancel(argument) else "No running task with that id.")
         elif name == ":speak" and argument in {"on", "off"}:
             self.app.speech.enabled = argument == "on"
             if self.app.speech.enabled:

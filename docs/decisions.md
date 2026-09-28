@@ -3,6 +3,30 @@
 Newest first. Each entry records what was decided and why, so later changes can
 revisit the reasoning instead of rediscovering it.
 
+## Background tasks, interruptions and fuller speech
+
+- **Background tasks:** `start_background_task` hands long work to another
+  conversation thread of the same compiled graph, so Eva keeps talking with the
+  user meanwhile. `DeepAgentAdapter` holds the graph, and each `AgentThread`
+  has its own checkpointed history, pending approvals and cancel flag. A task
+  cannot see the main conversation, so its instructions must be
+  self-contained. When it ends, its report reaches the main conversation as a
+  `[background task ...]` message and Eva relays it. At most three run at
+  once. Task output and approvals are labeled `[task <id>]`, and approval
+  questions are serialized so parallel tasks never interleave prompts. On exit,
+  running tasks are cancelled before the checkpointer closes. This stays
+  in-process: Deep Agents async subagents need an Agent Protocol server.
+- **Stopping:** `:stop` cancels the main turn at its next graph step. A tool
+  that is already running finishes first. `:cancel ID` does the same for a
+  task. `:shh` drops queued speech and kills playback, and `:record` does it
+  automatically, so the user can talk over Eva.
+- **Speech:** there is no fixed length. With speech on, Eva says
+  whole conversational answers aloud, gives spoken summaries of technical
+  results, and keeps the user posted during long work. If she runs three
+  tool-calling steps without speaking, the speech middleware adds a nudge for
+  a spoken progress update. The check is based on state, so it works for every
+  thread.
+
 ## Autonomy: background turns, heartbeats and follow-ups
 
 - The terminal is asynchronous (`prompt_toolkit`). Eva works on a background
