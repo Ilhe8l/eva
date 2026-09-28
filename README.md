@@ -10,6 +10,10 @@ She is built to run locally: the model is served by
 [faster-whisper](https://github.com/SYSTRAN/faster-whisper), and her voice is
 [Kokoro](https://github.com/hexgrad/kokoro). Nothing has to leave your computer.
 
+![Eva handling a background task while she talks and takes notes](docs/assets/demo.gif)
+
+<sub>In this recording Eva also speaks her answers aloud with Kokoro.</sub>
+
 ## What she does
 
 - **Talks.** Push-to-talk (`:record`) or hands-free (`:listen on`). She picks
