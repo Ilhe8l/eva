@@ -224,6 +224,7 @@ class TuiView:
         self._files: dict[str, str] = {}
         self._plan: list[dict] = []
         self._draft = ""  # what the user was typing when a question interrupted them
+        self._shown: dict[str, tuple] = {}
 
     # Lifecycle
 
@@ -381,8 +382,15 @@ class TuiView:
             self.face.mood = "sleepy"
         if not self._ready.is_set():
             return
-        self.app.query_one("#state", Static).update(self._state_text())
+        self._update("#state", self._state_text())
         self._show_panels()
+
+    def _update(self, selector: str, text: Text) -> None:
+        """Repaint a panel only when its content changed; each repaint is sent to the terminal."""
+        key = (text.plain, tuple(text.spans))
+        if self._shown.get(selector) != key:
+            self._shown[selector] = key
+            self.app.query_one(selector, Static).update(text)
 
     def _state_text(self) -> Text:
         showing, _ = self.face.expression
@@ -417,14 +425,16 @@ class TuiView:
             for item in self._plan:
                 mark, style = TODO_MARKS.get(item.get("status", ""), ("○", ""))
                 lines.append(f"{mark} {item.get('content', '')}\n", style=style)
-            plan.update(lines.rstrip() or lines)
+            lines.rstrip()
+            self._update("#plan", lines)
         files = self.app.query_one("#files", Static)
         files.set_class(bool(self._files), "shown")
         if self._files:
             lines = Text(no_wrap=True, overflow="ellipsis")  # one line per file, however long its path
             for path, verb in list(self._files.items())[:MAX_FILES]:
                 lines.append(f"{verb} {path}\n", style=DIM if verb == " " else "")
-            files.update(lines.rstrip() or lines)
+            lines.rstrip()
+            self._update("#files", lines)
 
     # Bookkeeping
 
