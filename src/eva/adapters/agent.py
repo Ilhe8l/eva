@@ -14,7 +14,7 @@ from pathlib import Path
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
-from langchain.agents.middleware import AgentMiddleware, InterruptOnConfig
+from langchain.agents.middleware import AgentMiddleware, InterruptOnConfig, TodoListMiddleware
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, RemoveMessage, ToolMessage
 from langchain_core.tools import BaseTool
@@ -122,7 +122,8 @@ class DeepAgentAdapter:
             memory=[MEMORY_INDEX],
             skills=[BUILTIN_SKILLS_ROUTE, SKILLS_ROUTE],
             interrupt_on=interrupt_on,
-            middleware=[*middleware, SteeringMiddleware(self.inbox)],
+            # Deep Agents 0.7 no longer plans with write_todos by default; Eva's terminal shows the plan.
+            middleware=[TodoListMiddleware(), *middleware, SteeringMiddleware(self.inbox)],
             checkpointer=checkpointer,
             name="eva",
         )

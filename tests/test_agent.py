@@ -274,3 +274,13 @@ def test_update_reminders_are_never_saved_to_the_thread(make_agent):
     assert KICKOFF_NUDGE in make.models[-1].prompts[1]
     saved = [message.text for message in agent._graph.get_state(agent.config).values["messages"]]
     assert not any("[reminder]" in text for text in saved)
+
+
+def test_eva_can_share_a_plan(make_agent):
+    make, _, _ = make_agent
+    events = []
+    todos = [{"content": "Check the forecast", "status": "in_progress"}]
+    agent = make(_call("write_todos", todos=todos), events=events)
+    agent.ask("plan it")
+    assert events[0] == ToolUse("write_todos", {"todos": todos}, call_id="call-write_todos")
+    assert agent._graph.get_state(agent.config).values["todos"] == todos

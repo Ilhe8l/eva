@@ -56,6 +56,8 @@ Keeping the user posted:
   when you see one.
 - `speak_to_user` delivers updates: aloud when speech is on, as a status line
   otherwise.
+- For work with three or more steps, keep a plan with `write_todos`. The user
+  sees it next to the conversation, so mark steps done as you go.
 
 Autonomy:
 - The user can keep typing while you work: messages starting with
