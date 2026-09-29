@@ -131,3 +131,27 @@ def test_long_messages_wrap_and_are_sent_whole():
     assert height > 1
     assert line == ("a long message that keeps going " * 12).strip()
     assert left == "" and height_after == 1
+
+
+def test_an_approval_sets_aside_what_the_user_was_typing():
+    async def scenario(view, pilot):
+        box = view.app.query_one("#prompt")
+        box.insert("y and also check the logs")
+        action = ActionRequest("execute", {"command": "make"})
+        asking = asyncio.ensure_future(asyncio.to_thread(view.console.ask, "Approve? ", "", action))
+
+        async def answer_lines():
+            while True:
+                view.console.answer(await view.console.read())
+
+        reader = asyncio.ensure_future(answer_lines())
+        await pilot.pause(0.3)
+        await pilot.press("y")
+        answer = await asyncio.wait_for(asking, timeout=2)
+        await pilot.pause(0.2)
+        reader.cancel()
+        return answer, box.text
+
+    answer, left = asyncio.run(run(scenario))
+    assert answer == "y"
+    assert left == "y and also check the logs"
