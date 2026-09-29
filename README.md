@@ -99,7 +99,7 @@ Eva reads `.env`. Models are named `provider:model`:
 | `EVA_AUTONOMOUS` | off | Act without asking |
 | `EVA_MAX_STEPS` | `500` | Steps per turn before she stops and reports back |
 | `EVA_HEARTBEAT_MINUTES` | `30` | Quiet time before she checks in (`0` disables) |
-| `EVA_DATA_DIR` | `.eva` | Her journal, skills, conversation and follow-ups |
+| `EVA_DATA_DIR` | `~/.eva` | Her journal, skills, conversation, follow-ups and scratch files |
 | `HF_TOKEN` | none | Faster model downloads |
 
 </details>
@@ -139,11 +139,12 @@ release-please turns them into versions and the changelog. See
 
 ```bash
 echo "EVA_UID=$(id -u)" >> .env && echo "EVA_GID=$(id -g)" >> .env
+mkdir -p ~/.eva
 docker compose run --rm eva
 ```
 
-The container runs as your user, so the files Eva writes in the repository stay
-yours. Her shell commands run inside the container; run her on the host when she
+The container runs as your user, so the files Eva writes stay yours, and it
+uses your `~/.eva`, so she remembers the same things in and out of Docker. Her shell commands run inside the container; run her on the host when she
 needs the rest of your computer, or for voice.
 
 ## License

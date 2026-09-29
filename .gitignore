@@ -10,6 +10,4 @@ __pycache__/
 *.wav
 
 # Files Eva creates while working
-large_tool_results/
 .playwright-cli/
-conversation_history/

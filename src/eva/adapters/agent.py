@@ -21,7 +21,7 @@ from langchain_core.tools import BaseTool
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Checkpointer, Command
 
-from eva.adapters.policy import BUILTIN_SKILLS_ROUTE, MEMORY_ROUTE, SKILLS_ROUTE
+from eva.adapters.policy import BUILTIN_SKILLS_ROUTE, MEMORY_ROUTE, SCRATCH_ROUTE, SKILLS_ROUTE
 from eva.adapters.steering import SteeringInbox, SteeringMiddleware
 from eva.adapters.tools import REACTION_EVENT
 from eva.adapters.voice import SPEECH_EVENT
@@ -53,7 +53,10 @@ class Workspace:
     """What Eva's file tools see, and where it lives on disk.
 
     `/` is the project (with shell execution), `/memories/` the journal,
-    `/skills/` her own skills and `/builtin-skills/` the bundled ones.
+    `/skills/` her own skills, `/builtin-skills/` the bundled ones and
+    `/scratch/` her working space for temporary files. Deep Agents offloads
+    large tool results and old conversation there too (`artifacts_root`), so
+    none of it lands in the project.
     `virtual_mode=True` confines file tools to each root; it does not confine
     shell commands, which the approval policy covers instead.
     """
@@ -69,8 +72,12 @@ class Workspace:
     def skills_dir(self) -> Path:
         return self.data_dir / "skills"
 
+    @property
+    def scratch_dir(self) -> Path:
+        return self.data_dir / "scratch"
+
     def backend(self) -> CompositeBackend:
-        for directory in (self.memory_dir, self.skills_dir):
+        for directory in (self.memory_dir, self.skills_dir, self.scratch_dir):
             directory.mkdir(parents=True, exist_ok=True)
         return CompositeBackend(
             default=LocalShellBackend(
@@ -83,11 +90,13 @@ class Workspace:
                 MEMORY_ROUTE: FilesystemBackend(root_dir=self.memory_dir, virtual_mode=True),
                 SKILLS_ROUTE: FilesystemBackend(root_dir=self.skills_dir, virtual_mode=True),
                 BUILTIN_SKILLS_ROUTE: FilesystemBackend(root_dir=BUILTIN_SKILLS_DIR, virtual_mode=True),
+                SCRATCH_ROUTE: FilesystemBackend(root_dir=self.scratch_dir, virtual_mode=True),
             },
+            artifacts_root=SCRATCH_ROUTE,
         )
 
     def system_prompt(self) -> str:
-        return build_system_prompt(self.skills_dir, BUILTIN_SKILLS_DIR)
+        return build_system_prompt(self.skills_dir, BUILTIN_SKILLS_DIR, self.scratch_dir)
 
 
 def _shell_env() -> dict[str, str]:

@@ -60,9 +60,11 @@ def test_other_commands_need_approval(command):
         ("/memories/../src/eva/cli.py", True),
         ("/memories", False),
         ("/README.md", True),
+        ("/scratch/download.zip", False),
+        ("/scratch/../src/eva/cli.py", True),
     ],
 )
-def test_only_journal_writes_are_free(path, expected):
+def test_only_journal_and_scratch_writes_are_free(path, expected):
     assert needs_write_approval(path) is expected
 
 

@@ -284,3 +284,12 @@ def test_eva_can_share_a_plan(make_agent):
     agent.ask("plan it")
     assert events[0] == ToolUse("write_todos", {"todos": todos}, call_id="call-write_todos")
     assert agent._graph.get_state(agent.config).values["todos"] == todos
+
+
+def test_large_tool_output_is_offloaded_outside_the_project(make_agent, tmp_path):
+    make, project, _ = make_agent
+    (project / "big.log").write_text("line of a long log file\n" * 40000)
+    make(_call("execute", command="cat big.log")).ask("read the log")
+    offloaded = list((tmp_path / "data" / "scratch").rglob("*"))
+    assert any(path.is_file() for path in offloaded)
+    assert sorted(path.name for path in project.iterdir()) == ["big.log", "notes.txt"]

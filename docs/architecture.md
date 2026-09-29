@@ -27,8 +27,10 @@ voice models stay in adapters.
 per background task (`application/tasks.py`). The graph uses:
 
 - a `CompositeBackend` built by `Workspace`: the project at `/` (with shell
-  execution), the journal at `/memories/`, Eva's skills at `/skills/` and
-  bundled skills at `/builtin-skills/`;
+  execution), the journal at `/memories/`, Eva's skills at `/skills/`,
+  bundled skills at `/builtin-skills/` and her scratch space at `/scratch/`,
+  which is also the `artifacts_root` where Deep Agents offloads large tool
+  results and summarized conversation;
 - `memory=["/memories/AGENTS.md"]`, which is loaded into every turn;
 - `skills=["/builtin-skills/", "/skills/"]`, which are rescanned on every
   message;
