@@ -113,3 +113,21 @@ def test_the_status_line_names_the_reaction_the_face_is_playing():
     during, after = asyncio.run(run(scenario))
     assert "proud" in during and "thinking" not in during
     assert "thinking" in after
+
+
+def test_long_messages_wrap_and_are_sent_whole():
+    async def scenario(view, pilot):
+        box = view.app.query_one("#prompt")
+        message = "a long message that keeps going " * 12
+        box.insert(message.strip())
+        await pilot.pause(0.1)
+        height = box.size.height
+        await pilot.press("enter")
+        line = await asyncio.wait_for(view.console.read(), timeout=2)
+        await pilot.pause(0.1)
+        return height, line, box.text, box.size.height
+
+    height, line, left, height_after = asyncio.run(run(scenario))
+    assert height > 1
+    assert line == ("a long message that keeps going " * 12).strip()
+    assert left == "" and height_after == 1

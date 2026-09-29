@@ -25,7 +25,8 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Input, Label, RichLog, Static
+from textual.message import Message
+from textual.widgets import Label, RichLog, Static, TextArea
 
 from eva.adapters.voice import SpeechPlayer
 from eva.domain.models import ActionRequest, AgentEvent, Reaction, Speech, TextDelta, ToolResult, ToolUse
@@ -65,6 +66,37 @@ QUIET_WHEN_OK = {
 TODO_MARKS = {"completed": ("✓", DIM), "in_progress": ("▸", "bold"), "pending": ("○", "")}
 APPROVAL_KEYS = {"y", "n", "a", "s"}
 LIST_ITEM = re.compile(r"([-*+]|\d+[.)])\s")
+
+
+class PromptBox(TextArea):
+    """Where the user types: long lines wrap and the box grows, and Enter sends."""
+
+    MAX_LINES = 6
+
+    class Submitted(Message):
+        def __init__(self, value: str) -> None:
+            super().__init__()
+            self.value = value
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(soft_wrap=True, compact=True, highlight_cursor_line=False, tab_behavior="focus", **kwargs)
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.Submitted(self.text.replace("\n", " ")))
+            return
+        await super()._on_key(event)
+
+    def on_text_area_changed(self) -> None:
+        self._fit()
+
+    def on_resize(self) -> None:
+        self._fit()
+
+    def _fit(self) -> None:
+        self.styles.height = max(1, min(self.MAX_LINES, self.wrapped_document.height))
 
 
 class ConversationLog(RichLog):
@@ -109,11 +141,11 @@ class EvaApp(App[None]):
     #files {{ height: auto; max-height: 10; display: none; }}
     #files.shown {{ display: block; }}
     #activity {{ height: 1fr; scrollbar-size-vertical: 1; }}
-    #prompt-row {{ height: 3; border: round #30363d; background: #0d1117; }}
+    #prompt-row {{ height: auto; border: round #30363d; background: #0d1117; }}
     #prompt-row.asking {{ border: round {YELLOW}; }}
     #prompt-label {{ width: auto; padding: 0 1; color: {GREEN}; text-style: bold; }}
     #prompt-row.asking #prompt-label {{ color: {YELLOW}; }}
-    #prompt {{ border: none; background: #0d1117; padding: 0; height: 1; }}
+    #prompt {{ border: none; background: #0d1117; padding: 0; height: 1; width: 1fr; }}
     #hints {{ height: 1; color: {DIM}; padding: 0 2; }}
     """
     BINDINGS = [
@@ -137,7 +169,7 @@ class EvaApp(App[None]):
                 yield RichLog(id="activity", wrap=True, min_width=20, classes="panel")
         with Horizontal(id="prompt-row"):
             yield Label("You ›", id="prompt-label")
-            yield Input(id="prompt")
+            yield PromptBox(id="prompt")
         yield Static("enter send · :help commands · pgup/pgdn scroll · ctrl+c quit", id="hints")
 
     def on_mount(self) -> None:
@@ -147,22 +179,23 @@ class EvaApp(App[None]):
         self.query_one("#files").border_title = "Files"
         self.query_one("#activity").border_title = "Activity"
         self.begin_capture_print(self.query_one(ConversationLog), stdout=True, stderr=False)
-        self.query_one("#prompt", Input).focus()
+        self.query_one(PromptBox).focus()
         self.set_interval(0.5, self.view.refresh_state)
         self.view.mounted(self)
 
     def on_unmount(self) -> None:
         self.view.console.feed(None)
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        event.input.value = ""
+    def on_prompt_box_submitted(self, event: PromptBox.Submitted) -> None:
+        self.query_one(PromptBox).clear()
         self.view.console.feed(event.value)
 
-    def on_input_changed(self, event: Input.Changed) -> None:
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
         """One key answers an approval: y, n or a, no Enter needed."""
-        if self.view.console.asking_approval and event.value.strip().lower() in APPROVAL_KEYS:
-            event.input.value = ""
-            self.view.console.feed(event.value.strip())
+        answer = event.text_area.text.strip().lower()
+        if self.view.console.asking_approval and answer in APPROVAL_KEYS:
+            event.text_area.clear()
+            self.view.console.feed(answer)
 
     def action_scroll_chat(self, pages: int) -> None:
         log = self.query_one(ConversationLog)
