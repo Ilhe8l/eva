@@ -223,6 +223,7 @@ class TuiView:
         self._terminal: Terminal | None = None
         self._files: dict[str, str] = {}
         self._plan: list[dict] = []
+        self._draft = ""  # what the user was typing when a question interrupted them
 
     # Lifecycle
 
@@ -367,6 +368,12 @@ class TuiView:
         row = self.app.query_one("#prompt-row")
         row.set_class(bool(question), "asking")
         self.app.query_one("#prompt-label", Label).update(Text(question.strip() or "You ›"))
+        box = self.app.query_one(PromptBox)
+        if question:  # an empty box, so a single key answers
+            self._draft, _ = box.text, box.clear()
+        elif self._draft:
+            box.insert(self._draft)
+            self._draft = ""
 
     def refresh_state(self) -> None:
         now = self._clock()
