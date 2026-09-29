@@ -11,9 +11,9 @@
 
 [Quick start](#quick-start) · [Commands](#commands) · [Configuration](#configuration) · [How it works](#how-it-works)
 
-<img src="docs/assets/demo.gif" alt="Eva checking disk usage in a background task while she talks and takes notes" width="100%">
+<img src="docs/assets/demo.gif" alt="Eva teaching herself to check the weather in the split-screen terminal" width="100%">
 
-<sub><i>Eva runs a background task, takes a note in her journal, and reports back. She also says her answers aloud.</i></sub>
+<sub><i>Eva teaches herself to check the weather: she plans, writes a skill, uses it, and answers. Her face follows along.</i></sub>
 
 </div>
 
@@ -32,6 +32,9 @@ She is named after EVE (EVA in Brazil) from WALL-E.
   aloud and leaves code and lists on screen. You can talk over her.
 - **Keeps you posted.** On longer work she says what she is about to do, reports
   milestones with real numbers, and flags problems as they come up.
+- **Shows her work.** The terminal splits in two: the conversation on the left,
+  and on the right her face, her plan, the files she touches and every command
+  with its result.
 - **Works while you talk.** Long jobs run as background tasks, and a message sent
   mid-task reaches her at her next step, so "actually, stop" works.
 - **Remembers.** A Markdown journal she organizes herself, and a conversation
@@ -41,6 +44,16 @@ She is named after EVE (EVA in Brazil) from WALL-E.
   and the tests pass.
 - **Takes initiative.** After a quiet spell she checks for pending work, and she
   schedules follow-ups for herself.
+
+## Her face
+
+<img src="docs/assets/face.gif" alt="Eva's pixel-art face showing each of her expressions" width="100%">
+
+Her face shows what she is doing: a seedling grows while she thinks, her eyes
+read along while she works, and she looks at you when she needs an answer. She
+also reacts when the moment calls for it (happy, amused, proud, worried,
+surprised, a wink) and then settles back. Everything is drawn in the terminal
+with half-block characters.
 
 ## Quick start
 
@@ -73,8 +86,9 @@ You can speak any language, and Eva answers in English.
 | `:help` / `:quit` | Show commands / exit |
 
 Read-only commands (`ls`, `grep`, `git status`, ...) run right away. Anything
-else waits for your approval; answer `a` to allow it for the rest of the
-session. See [SECURITY.md](SECURITY.md) before turning on autonomous mode.
+else waits for your approval: press `y`, `n`, or `a` to allow it for the rest
+of the session. `PgUp`/`PgDn` scroll the conversation, and `Ctrl+C` quits.
+`--plain` keeps the classic line-by-line view. See [SECURITY.md](SECURITY.md) before turning on autonomous mode.
 
 ## Configuration
 
@@ -99,6 +113,7 @@ Eva reads `.env`. Models are named `provider:model`:
 | `EVA_AUTONOMOUS` | off | Act without asking |
 | `EVA_MAX_STEPS` | `500` | Steps per turn before she stops and reports back |
 | `EVA_HEARTBEAT_MINUTES` | `30` | Quiet time before she checks in (`0` disables) |
+| `EVA_UI` | split screen | `plain` for the line-by-line view |
 | `EVA_DATA_DIR` | `~/.eva` | Her journal, skills, conversation, follow-ups and scratch files |
 | `HF_TOKEN` | none | Faster model downloads |
 
