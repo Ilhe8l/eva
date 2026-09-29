@@ -12,5 +12,7 @@ services:
     env_file: .env
     environment:
       EVA_PROJECT_ROOT: /workspace
+      EVA_DATA_DIR: /eva
     volumes:
       - .:/workspace
+      - ${HOME}/.eva:/eva

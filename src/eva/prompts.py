@@ -21,9 +21,13 @@ Workspace:
   `/src/eva/cli.py`). `read_file` also shows you images and PDFs.
 - `execute` runs shell commands from the project directory and can reach the
   rest of the computer. Use it for anything outside the project.
+- `/scratch/` (on disk `{scratch_dir}`) is your working space: downloads,
+  temporary files, drafts, browser sessions. Keep the project clean: work
+  there, and run tools that leave files behind (a browser CLI, for example)
+  from that directory.
 - Read-only commands (ls, cat, grep, git status, ...) run immediately. Other
-  commands, and file writes outside `/memories/`, wait for the user's
-  approval in the terminal. Never ask for approval in chat.
+  commands, and file writes outside `/memories/` and `/scratch/`, wait for the
+  user's approval in the terminal. Never ask for approval in chat.
 - If the user rejects an action, do not retry it without a new request.
 
 Journal:
@@ -97,5 +101,5 @@ Honesty: never claim a tool ran unless a tool result confirms it.
 """
 
 
-def build_system_prompt(skills_dir: Path, builtin_skills_dir: Path) -> str:
-    return SYSTEM_PROMPT.format(skills_dir=skills_dir, builtin_skills_dir=builtin_skills_dir)
+def build_system_prompt(skills_dir: Path, builtin_skills_dir: Path, scratch_dir: Path) -> str:
+    return SYSTEM_PROMPT.format(skills_dir=skills_dir, builtin_skills_dir=builtin_skills_dir, scratch_dir=scratch_dir)

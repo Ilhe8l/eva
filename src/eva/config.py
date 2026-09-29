@@ -7,11 +7,17 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+def default_data_dir() -> Path:
+    """Eva's journal, skills and conversations belong to the user, not to a checkout
+    of her code, so they live in the home directory."""
+    return Path.home() / ".eva"
+
+
 @dataclass(frozen=True)
 class Settings:
     model: str
     lm_studio_url: str = "http://localhost:1234/v1"
-    data_dir: Path = field(default_factory=lambda: Path(".eva"))
+    data_dir: Path = field(default_factory=default_data_dir)
     project_root: Path = field(default_factory=Path.cwd)
     thread_id: str = "main"
     heartbeat_minutes: float = 30
@@ -30,7 +36,7 @@ class Settings:
         return cls(
             model=selected,
             lm_studio_url=os.getenv("EVA_LM_STUDIO_URL", cls.lm_studio_url),
-            data_dir=Path(os.getenv("EVA_DATA_DIR", project_root / ".eva")).resolve(),
+            data_dir=Path(os.getenv("EVA_DATA_DIR", default_data_dir())).expanduser().resolve(),
             project_root=project_root,
             thread_id=os.getenv("EVA_THREAD_ID", cls.thread_id),
             heartbeat_minutes=float(os.getenv("EVA_HEARTBEAT_MINUTES", cls.heartbeat_minutes)),

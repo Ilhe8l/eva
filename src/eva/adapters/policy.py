@@ -7,7 +7,8 @@ builds `interrupt_on` entries with `when` predicates for
 `HumanInTheLoopMiddleware`
 (https://docs.langchain.com/oss/python/deepagents/human-in-the-loop).
 
-Read-only shell commands and memory writes run freely. Everything else pauses.
+Read-only shell commands and writes to the journal or the scratch space run
+freely. Everything else pauses.
 """
 
 import posixpath
@@ -21,7 +22,8 @@ from langchain.agents.middleware import InterruptOnConfig
 MEMORY_ROUTE = "/memories/"
 SKILLS_ROUTE = "/skills/"
 BUILTIN_SKILLS_ROUTE = "/builtin-skills/"
-FREE_WRITE_PREFIXES = (MEMORY_ROUTE,)
+SCRATCH_ROUTE = "/scratch/"
+FREE_WRITE_PREFIXES = (MEMORY_ROUTE, SCRATCH_ROUTE)
 SENSITIVE_MARKERS = (".env", ".ssh", ".gnupg", ".aws", ".netrc", "id_rsa", "id_ed25519", "credentials")
 _CHAIN_OPERATORS = {"|", "&&", "||"}
 _FORBIDDEN_CHARACTERS = ("$", "`", "\n")
@@ -134,8 +136,8 @@ def needs_write_approval(path: str) -> bool:
 class ApprovalPolicy:
     """Decides which tool calls pause for the user; the user can widen it live.
 
-    In autonomous mode nothing pauses. Otherwise read-only commands and journal
-    writes run freely, anything the user chose to "always allow" this session
+    In autonomous mode nothing pauses. Otherwise read-only commands and writes
+    to the journal or scratch space run freely, anything the user chose to "always allow" this session
     runs freely, and everything else pauses.
     """
 

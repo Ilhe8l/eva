@@ -142,7 +142,7 @@ immediately without rebuilding the graph.
   nothing to do, she replies `HEARTBEAT_OK`, and that exchange is removed from
   the thread with `RemoveMessage` so idle checks do not fill the context.
 - **Follow-ups:** `schedule_follow_up` stores a note in
-  `.eva/follow_ups.json`, which survives restarts. A clock delivers it as a
+  `~/.eva/follow_ups.json`, which survives restarts. A clock delivers it as a
   `[follow-up]` message when due.
 - Deep Agents
   [async subagents](https://docs.langchain.com/oss/python/deepagents/async-subagents)
@@ -202,7 +202,7 @@ Eva extends herself with the mechanisms Deep Agents already provides:
 
 - **Skills** ([docs](https://docs.langchain.com/oss/python/deepagents/skills)):
   Eva writes `/skills/<name>/SKILL.md` and optional scripts, stored in
-  `.eva/skills/`, so they are personal and outside Git. Bundled skills live in
+  `~/.eva/skills/`, so they are personal and outside Git. Bundled skills live in
   `src/eva/skills/` and are mounted at `/builtin-skills/`. Writing a skill needs
   approval, and so does running its scripts, like any non-read-only command.
   Scripts are standalone `uv` scripts with inline dependencies, so they never
@@ -238,20 +238,37 @@ with `when` predicates (`adapters/policy.py`):
 | --- | --- |
 | Read-only shell commands (`ls`, `cat`, `grep`, `git status`, ...), pipelines of them | none |
 | Any other command, redirects, `$`/backticks, secret paths (`.env`, `.ssh`, ...) | required |
-| Writes, edits and deletes under `/memories/` (the journal) | none |
+| Writes, edits and deletes under `/memories/` (the journal) or `/scratch/` | none |
 | Any other write, edit or delete | required |
 | Reading secret files with `read_file` | required |
 
 `tests/test_agent.py` runs the real graph with a scripted model to keep this true.
 
-## One backend, two roots
+## One backend, several roots
 
 A `CompositeBackend` exposes the project at `/` through `LocalShellBackend`,
-which also runs shell commands from the project directory. The journal is
-exposed at `/memories/` through `FilesystemBackend`. Both use
-`virtual_mode=True`, so file tools cannot escape their roots. Shell commands
+which also runs shell commands from the project directory. The journal
+(`/memories/`), Eva's skills (`/skills/`), the bundled skills
+(`/builtin-skills/`) and her scratch space (`/scratch/`) are routes to
+`FilesystemBackend`s. All use `virtual_mode=True`, so file tools cannot escape
+their roots. Shell commands
 can reach the whole computer, and the approval policy governs them. API keys
 and other secret-looking variables are removed from the shell environment.
+
+## Eva's data lives in the home directory
+
+The journal, skills, conversations, follow-ups and scratch files belong to the
+user, not to a checkout of Eva's code, so they live in `~/.eva`
+(`EVA_DATA_DIR`), the way coding assistants keep theirs in the home directory.
+Eva stays the same Eva whichever folder she starts from, and a fresh clone
+does not lose her memory. `/` is still her own project, so she can edit her
+code.
+
+Deep Agents writes large tool results and summarized conversation under the
+backend's `artifacts_root`, which defaults to `/`, the project. It is set to
+`/scratch/`, so nothing lands in the repository. The prompt asks Eva to work
+there too, and to run tools that leave files behind, such as a browser CLI,
+from that directory.
 
 ## Journal is Deep Agents memory
 
