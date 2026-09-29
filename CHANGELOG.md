@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.2.0](https://github.com/Ilhe8l/eva/compare/v0.1.0...v0.2.0) (2026-09-29)
+
+
+### Features
+
+* an animated pixel-art face for Eva ([5f3a93a](https://github.com/Ilhe8l/eva/commit/5f3a93a28903211ddf2fbbb07891a9a86daebd51))
+* Eva keeps a visible plan for multi-step work ([facf78d](https://github.com/Ilhe8l/eva/commit/facf78d03999e391283ed546188358ce476d4fc3))
+* report tool results and let Eva choose her expressions ([e2cb0da](https://github.com/Ilhe8l/eva/commit/e2cb0da67b41490a2a1b359ca50262e49821dabd))
+* split-screen terminal with Eva's face ([3420eb0](https://github.com/Ilhe8l/eva/commit/3420eb0bffbf403ef2736a4453c8d90b1416ba73))
+
+
+### Bug Fixes
+
+* an approval never gets stuck behind text already in the input box ([511e092](https://github.com/Ilhe8l/eva/commit/511e0924ed80a861e378c43a5d55482343c6f3d5))
+* keep the Activity panel visible on short terminals ([71252d9](https://github.com/Ilhe8l/eva/commit/71252d95e54b1e5b01348d7054e5c4d36f84c269))
+* long messages wrap in the input box instead of scrolling sideways ([315d83f](https://github.com/Ilhe8l/eva/commit/315d83f31d84798110553f0b274c39833d4f496b))
+* the status line names the reaction Eva's face is playing ([f35595b](https://github.com/Ilhe8l/eva/commit/f35595b24421d6e7050ab987ebaec3ed4860bde3))
+
+
+### Performance Improvements
+
+* repaint side panels only when their content changes ([e930a16](https://github.com/Ilhe8l/eva/commit/e930a168af7dcfae281e047767e42280b89880bb))
+
+
+### Documentation
+
+* show the split screen and Eva's face in the README ([f69ea4c](https://github.com/Ilhe8l/eva/commit/f69ea4cdba7f5524860de34ffb0f0dba9adcecd7))
+
 ## 0.1.0 (2026-09-28)
 
 
