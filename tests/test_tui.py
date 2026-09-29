@@ -168,3 +168,18 @@ def test_activity_stays_visible_on_a_short_terminal():
         return view.app.query_one("#activity").size.height
 
     assert asyncio.run(run(scenario)) >= 4
+
+
+def test_panels_are_not_repainted_when_nothing_changed():
+    async def scenario(view, pilot):
+        await asyncio.to_thread(view, ToolUse("write_todos", {"todos": [{"content": "one", "status": "pending"}]}))
+        await pilot.pause(0.2)
+        plan = view.app.query_one("#plan")
+        updates = []
+        original = plan.update
+        plan.update = lambda *args, **kwargs: (updates.append(args), original(*args, **kwargs))
+        for _ in range(3):
+            view.refresh_state()
+        return updates
+
+    assert asyncio.run(run(scenario)) == []
