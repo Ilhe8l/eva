@@ -155,3 +155,16 @@ def test_an_approval_sets_aside_what_the_user_was_typing():
     answer, left = asyncio.run(run(scenario))
     assert answer == "y"
     assert left == "y and also check the logs"
+
+
+def test_activity_stays_visible_on_a_short_terminal():
+    async def scenario(view, pilot):
+        todos = [{"content": f"step {i} with a fairly long description to wrap", "status": "pending"} for i in range(8)]
+        await asyncio.to_thread(view, ToolUse("write_todos", {"todos": todos}))
+        for i in range(8):
+            await asyncio.to_thread(view, ToolUse("write_file", {"file_path": f"/notes/file-{i}.md"}))
+        await pilot.resize_terminal(120, 32)
+        await pilot.pause(0.3)
+        return view.app.query_one("#activity").size.height
+
+    assert asyncio.run(run(scenario)) >= 4

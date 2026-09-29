@@ -40,7 +40,7 @@ BLUE, GREEN, DIM, YELLOW, RED = "#79c0ff", "#7ee787", "#8b949e", "#e3b341", "#ff
 FPS = 12
 SLEEP_AFTER_SECONDS = 300
 WORDS_PER_SECOND = 2.7  # roughly how fast Kokoro speaks, to animate the eyes meanwhile
-MAX_FILES = 8
+MAX_FILES = 5
 TOOL_GLYPHS = {
     "execute": "$",
     "write_file": "+",
@@ -136,11 +136,11 @@ class EvaApp(App[None]):
     #face {{ width: 100%; height: 11; content-align: center middle; margin-top: 1; }}
     #state {{ width: 100%; height: 2; content-align: center top; color: {DIM}; }}
     .panel {{ border: round #30363d; border-title-color: {DIM}; padding: 0 1; background: #0d1117; }}
-    #plan {{ height: auto; max-height: 12; display: none; }}
+    #plan {{ height: auto; max-height: 8; display: none; }}
     #plan.shown {{ display: block; }}
-    #files {{ height: auto; max-height: 10; display: none; }}
+    #files {{ height: auto; max-height: 7; display: none; }}
     #files.shown {{ display: block; }}
-    #activity {{ height: 1fr; scrollbar-size-vertical: 1; }}
+    #activity {{ height: 1fr; min-height: 6; scrollbar-size-vertical: 1; }}
     #prompt-row {{ height: auto; border: round #30363d; background: #0d1117; }}
     #prompt-row.asking {{ border: round {YELLOW}; }}
     #prompt-label {{ width: auto; padding: 0 1; color: {GREEN}; text-style: bold; }}
