@@ -247,6 +247,7 @@ class TuiView:
                         self.face.speak(duration)
                     if mood:
                         self.face.react(mood, max(3.5, duration))
+                        self._ui(self.refresh_state)
                 case ToolUse(name, arguments, source):
                     self._flush()
                     self.face.mood = "loading" if name == "restart_eva" else "focused"
@@ -259,6 +260,7 @@ class TuiView:
                         self.face.react("worried", 3)
                 case Reaction(mood):
                     self.face.react(mood, 4)
+                    self._ui(self.refresh_state)
         self._last_activity = self._clock()
 
     def end_turn(self) -> bool:
@@ -343,6 +345,7 @@ class TuiView:
         self._show_panels()
 
     def _state_text(self) -> Text:
+        showing, _ = self.face.expression
         doing = {
             "thinking": "thinking",
             "focused": "working",
@@ -351,6 +354,8 @@ class TuiView:
             "listening": "listening",
             "sleepy": "resting",
         }.get(self.face.mood, "ready")
+        if showing != self.face.mood:  # a reaction is playing: name what the face shows
+            doing = showing
         text = Text.assemble(("Eva", f"bold {BLUE}"), (f" · {doing}", DIM))
         terminal = self._terminal
         if terminal is not None and getattr(terminal, "app", None) is not None:
@@ -376,7 +381,7 @@ class TuiView:
         files = self.app.query_one("#files", Static)
         files.set_class(bool(self._files), "shown")
         if self._files:
-            lines = Text()
+            lines = Text(no_wrap=True, overflow="ellipsis")  # one line per file, however long its path
             for path, verb in list(self._files.items())[:MAX_FILES]:
                 lines.append(f"{verb} {path}\n", style=DIM if verb == " " else "")
             files.update(lines.rstrip() or lines)

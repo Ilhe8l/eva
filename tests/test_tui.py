@@ -98,3 +98,18 @@ def test_stray_prints_land_in_the_conversation():
         return text_of(view.app.query_one(ConversationLog))
 
     assert "Downloading the speech model..." in asyncio.run(run(scenario))
+
+
+def test_the_status_line_names_the_reaction_the_face_is_playing():
+    async def scenario(view, pilot):
+        view.status("thinking")
+        await asyncio.to_thread(view, Reaction("proud"))
+        await pilot.pause(0.1)
+        during = str(view.app.query_one("#state").render())
+        view.face._reaction = None  # the reaction ran out
+        view.refresh_state()
+        return during, str(view.app.query_one("#state").render())
+
+    during, after = asyncio.run(run(scenario))
+    assert "proud" in during and "thinking" not in during
+    assert "thinking" in after
