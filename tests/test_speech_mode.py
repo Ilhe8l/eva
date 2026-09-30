@@ -1,6 +1,8 @@
+from datetime import datetime, timedelta, timezone
+
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from eva.adapters.speech_mode import KICKOFF_NUDGE, PROGRESS_NUDGE, SpeechModeMiddleware
+from eva.adapters.speech_mode import KICKOFF_NUDGE, PROGRESS_NUDGE, SpeechModeMiddleware, time_note
 from eva.adapters.voice import SpeechChannel
 
 
@@ -68,3 +70,8 @@ def test_background_tasks_are_nudged_less_often():
     assert guide.nudge(work(step(index=0), step(index=1)), "main-task-abc") is None
     clock.now = 61
     assert guide.nudge(work(step(index=0), step(index=1), step(index=2)), "main-task-abc") == PROGRESS_NUDGE
+
+
+def test_the_time_is_given_in_the_users_zone_to_the_minute():
+    now = datetime(2026, 9, 30, 14, 5, 42, tzinfo=timezone(timedelta(hours=-3)))
+    assert time_note(now) == "Now: Wednesday, 2026-09-30 14:05 (UTC-03:00)."
