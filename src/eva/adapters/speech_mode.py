@@ -1,8 +1,9 @@
-"""Tells the model, on every call, whether the user is listening and when to post an update."""
+"""Tells the model, on every call, what time it is, whether the user is listening and when to post an update."""
 
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from langchain.agents.middleware import AgentMiddleware, ModelRequest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -43,11 +44,27 @@ CONVERSATION_PACE = UpdatePace(quiet_seconds=20, max_silent_steps=6)
 BACKGROUND_PACE = UpdatePace(quiet_seconds=60, max_silent_steps=10)  # tasks run beside the chat
 
 
+def local_now() -> datetime:
+    return datetime.now().astimezone()
+
+
+def time_note(now: datetime) -> str:
+    """The date and time in the user's time zone, to the minute so the prompt stays cacheable."""
+    offset = now.strftime("%z")
+    return f"Now: {now:%A, %Y-%m-%d %H:%M} (UTC{offset[:3]}:{offset[3:]})."
+
+
 class SpeechModeMiddleware(AgentMiddleware):
-    def __init__(self, speech: SpeechChannel, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(
+        self,
+        speech: SpeechChannel,
+        clock: Callable[[], float] = time.monotonic,
+        now: Callable[[], datetime] = local_now,
+    ) -> None:
         super().__init__()
         self.speech = speech
         self._clock = clock
+        self._now = now
         self._quiet_since: dict[str, float] = {}
 
     def wrap_model_call(self, request: ModelRequest, handler):
@@ -59,7 +76,8 @@ class SpeechModeMiddleware(AgentMiddleware):
     def _with_guidance(self, request: ModelRequest) -> ModelRequest:
         mode = SPEECH_ON if self.speech.enabled else SPEECH_OFF
         blocks = list(request.system_message.content_blocks) if request.system_message else []
-        system = SystemMessage(content=[*blocks, {"type": "text", "text": mode}])
+        guidance = f"{time_note(self._now())}\n{mode}"
+        system = SystemMessage(content=[*blocks, {"type": "text", "text": guidance}])
         messages = request.messages
         if nudge := self.nudge(messages, _thread_id()):
             # Models heed the latest message far more than the end of a long system prompt.

@@ -293,3 +293,9 @@ def test_large_tool_output_is_offloaded_outside_the_project(make_agent, tmp_path
     offloaded = list((tmp_path / "data" / "scratch").rglob("*"))
     assert any(path.is_file() for path in offloaded)
     assert sorted(path.name for path in project.iterdir()) == ["big.log", "notes.txt"]
+
+
+def test_eva_is_told_the_date_on_every_model_call(make_agent):
+    make, _, _ = make_agent
+    make(AIMessage(content="Hi.")).ask("what day is it?")
+    assert "Now: " in make.models[-1].prompts[0]

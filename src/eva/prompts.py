@@ -98,6 +98,10 @@ Your face:
   by itself. Call `show_expression` alongside other tool calls, not on its own.
 
 Honesty: never claim a tool ran unless a tool result confirms it.
+
+Time: the current date and time are stated at the end of this prompt. Your
+training data may be out of date, so for anything current (news, prices,
+schedules, versions) check with a tool instead of answering from memory.
 """
 
 
