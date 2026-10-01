@@ -21,7 +21,7 @@ classifiers = [
 ]
 dependencies = [
     "deepagents>=0.7.19,<1",
-    "langchain>=1.4,<2",
+    "langchain>=1.4.3,<2",  # repairs malformed tool calls, which small local models emit
     "langchain-google-genai>=4.4,<5",
     "langchain-openai>=1,<2",
     "langgraph-checkpoint-sqlite>=3,<4",
