@@ -122,7 +122,9 @@ class UtteranceDetector:
         max_seconds: float = 30.0,
         preroll_seconds: float = 0.3,
     ) -> None:
-        frames = lambda seconds: max(1, round(seconds / self.FRAME_SECONDS))  # noqa: E731
+        def frames(seconds: float) -> int:
+            return max(1, round(seconds / self.FRAME_SECONDS))
+
         self._is_speech = is_speech
         self._start_frames = start_frames
         self._pause_frames = frames(pause_seconds)
@@ -220,10 +222,8 @@ class WhisperTranscriber:
 
     def warm_up(self) -> None:
         """Load the model ahead of the first recording; errors surface on use instead."""
-        try:
+        with contextlib.suppress(Exception):
             self._load()
-        except Exception:  # noqa: BLE001
-            pass
 
     def transcribe(self, audio) -> str:
         """Text of `audio` (a file path or 16 kHz float32 samples), without guesses made on noise."""
@@ -272,7 +272,7 @@ class WhisperTranscriber:
 
         try:
             download_model(self.model_name, local_files_only=True)
-        except Exception:  # noqa: BLE001 - any failure means it is not usable offline yet
+        except Exception:  # any failure means it is not usable offline yet
             return False
         return True
 
@@ -414,7 +414,7 @@ class SpeechPlayer:
             self._speaking = True
             try:
                 job()
-            except Exception as exc:  # noqa: BLE001 - a failed sentence must not silence Eva for good
+            except Exception as exc:  # a failed sentence must not silence Eva for good
                 self._on_error(exc)
             finally:
                 self._speaking = False

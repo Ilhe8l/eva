@@ -88,7 +88,7 @@ async def in_daemon_thread(function: Callable[..., Any], *args: Any) -> Any:
     def target() -> None:
         try:
             outcome = (future.set_result, function(*args))
-        except BaseException as exc:  # noqa: BLE001 - re-raised in the awaiting task
+        except BaseException as exc:  # re-raised in the awaiting task
             outcome = (future.set_exception, exc)
         with contextlib.suppress(RuntimeError):  # the loop may already be closed
             loop.call_soon_threadsafe(settle, *outcome)
@@ -496,10 +496,8 @@ class Terminal:
 
     def _answer(self, session, turn: Turn) -> None:
         try:
-            if turn.kind is TurnKind.HEARTBEAT:
-                reply = session.heartbeat(now())
-            else:
-                reply = session.send(turn.message)
+            heartbeat = turn.kind is TurnKind.HEARTBEAT
+            reply = session.heartbeat(now()) if heartbeat else session.send(turn.message)
         except TurnCancelled:
             self.view.end_turn()
             self.view.notice("(Stopped.)")
@@ -510,7 +508,7 @@ class Terminal:
             if turn.message != STEP_LIMIT_MESSAGE:  # ask for a summary once, never in a loop
                 self._loop.call_soon_threadsafe(self._turns.put_nowait, Turn(TurnKind.SYSTEM, STEP_LIMIT_MESSAGE))
             return
-        except Exception as exc:  # noqa: BLE001 - keep Eva alive on model errors
+        except Exception as exc:  # keep Eva alive on model errors
             self.view.end_turn()
             self.view.notice(f"Eva error: {exc}", tone="error")
             return
@@ -579,7 +577,7 @@ class Terminal:
         """An utterance from hands-free listening (listener thread): transcribe and send it."""
         try:
             text = self.transcriber.transcribe(audio)
-        except Exception as exc:  # noqa: BLE001 - keep listening after a failed transcription
+        except Exception as exc:  # keep listening after a failed transcription
             self.view.notice(f"Voice input unavailable: {exc}", tone="error")
             return
         if text:
@@ -597,7 +595,7 @@ class Terminal:
                 text = self.transcriber.transcribe(path)
             finally:
                 path.unlink(missing_ok=True)
-        except Exception as exc:  # noqa: BLE001 - audio devices and model downloads fail in many ways
+        except Exception as exc:  # audio devices and model downloads fail in many ways
             self.view.notice(f"Voice input unavailable: {exc}", tone="error")
             return None
         finally:

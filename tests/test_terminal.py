@@ -152,7 +152,8 @@ def test_updates_with_speech_off_are_shown_but_not_played(capsys):
     from eva.domain.models import Speech
 
     class RecordingPlayer(SilentPlayer):
-        played = []
+        def __init__(self):
+            self.played = []
 
         def play(self, text):
             self.played.append(text)

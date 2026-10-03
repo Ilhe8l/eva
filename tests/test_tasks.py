@@ -61,7 +61,7 @@ def test_running_tasks_are_capped():
     board, _, _ = _board(lambda task: FakeSession("x"))
     for index in range(MAX_RUNNING):
         board.start(f"task {index}", "work")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Already running"):
         board.start("one too many", "work")
 
 

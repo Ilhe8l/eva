@@ -89,6 +89,6 @@ class TaskBoard:
         except StepLimitReached:
             task.report = "Stopped at the step limit before finishing; the work so far is in its thread."
             task.status = TaskStatus.FAILED
-        except Exception as exc:  # noqa: BLE001 - a failed task is reported, not raised
+        except Exception as exc:  # a failed task is reported, not raised
             task.report, task.status = f"Failed: {exc}", TaskStatus.FAILED
         self.on_finish(task)

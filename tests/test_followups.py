@@ -30,5 +30,5 @@ def test_follow_ups_can_be_cancelled(tmp_path):
     ("delay", "note"), [(timedelta(seconds=10), "x"), (timedelta(days=31), "x"), (timedelta(minutes=5), " ")]
 )
 def test_invalid_follow_ups_are_rejected(tmp_path, delay, note):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"Schedule between|needs a note"):
         FollowUpStore(tmp_path / "follow_ups.json").add(delay, note, NOW)
