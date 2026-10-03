@@ -61,7 +61,25 @@ line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B"]
+select = [
+    "E", "W", "F",  # pycodestyle and pyflakes
+    "I",            # import order
+    "UP",           # modern syntax for the target Python
+    "B",            # likely bugs
+    "SIM", "C4", "PIE", "RET", "FURB",  # simpler code
+    "PERF",         # avoidable slowness
+    "PTH",          # pathlib over os.path
+    "PT",           # pytest style
+    "RUF",          # ruff's own checks, including unused noqa comments
+]
+# A composite assert reads fine in a test and names what it checks.
+ignore = ["PT018"]
+# Eva's terminal prompt uses a typographic arrow on purpose.
+allowed-confusables = ["›"]
+
+[tool.ruff.lint.per-file-ignores]
+# The voice tests skip themselves before importing modules that need the voice extra.
+"tests/test_listening.py" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

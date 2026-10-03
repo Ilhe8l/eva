@@ -16,6 +16,7 @@ import re
 import shlex
 from collections.abc import Callable
 from pathlib import PurePosixPath
+from typing import ClassVar
 
 from langchain.agents.middleware import InterruptOnConfig
 
@@ -141,7 +142,7 @@ class ApprovalPolicy:
     runs freely, and everything else pauses.
     """
 
-    RULES: dict[str, Callable[[dict], bool]] = {
+    RULES: ClassVar[dict[str, Callable[[dict], bool]]] = {
         "execute": lambda args: not is_safe_command(str(args.get("command", ""))),
         "read_file": lambda args: is_sensitive_path(str(args.get("file_path", ""))),
         "write_file": lambda args: needs_write_approval(str(args.get("file_path", ""))),

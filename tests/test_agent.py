@@ -4,6 +4,7 @@ import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import Field
 
 from eva.adapters.agent import DeepAgentAdapter, Workspace
 from eva.adapters.followups import FollowUpStore
@@ -19,7 +20,7 @@ from eva.domain.models import Reaction, Speech, StepLimitReached, TextDelta, Too
 
 
 class ScriptedModel(GenericFakeChatModel):
-    prompts: list = []  # everything the model saw, per call
+    prompts: list = Field(default_factory=list)  # everything the model saw, per call
 
     def bind_tools(self, tools, **kwargs):
         return self
@@ -33,7 +34,7 @@ def _call(name, **args):
     return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": f"call-{name}"}])
 
 
-@pytest.fixture()
+@pytest.fixture
 def make_agent(tmp_path):
     project = tmp_path / "project"
     project.mkdir()

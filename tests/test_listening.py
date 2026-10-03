@@ -2,7 +2,7 @@ import pytest
 
 np = pytest.importorskip("numpy", reason="needs the voice extra")
 
-from eva.adapters.voice import MICROPHONE_SAMPLE_RATE, UtteranceDetector  # noqa: E402
+from eva.adapters.voice import MICROPHONE_SAMPLE_RATE, UtteranceDetector
 
 FRAME = UtteranceDetector.FRAME_SAMPLES
 rng = np.random.default_rng(0)

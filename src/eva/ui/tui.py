@@ -7,6 +7,7 @@ the same asyncio loop as `Terminal`; worker threads reach it through
 """
 
 import asyncio
+import contextlib
 import re
 import threading
 import time
@@ -14,7 +15,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from rich.console import Group, RenderableType
 from rich.markdown import Markdown
@@ -148,7 +149,7 @@ class EvaApp(App[None]):
     #prompt {{ border: none; background: #0d1117; padding: 0; height: 1; width: 1fr; }}
     #hints {{ height: 1; color: {DIM}; padding: 0 2; }}
     """
-    BINDINGS = [
+    BINDINGS: ClassVar = [
         Binding("ctrl+c", "quit", "Quit", priority=True),
         Binding("pageup", "scroll_chat(-1)", show=False, priority=True),
         Binding("pagedown", "scroll_chat(1)", show=False, priority=True),
@@ -257,10 +258,8 @@ class TuiView:
         if self._loop is None or not self._ready.is_set():
             self._early.append((function, args))
             return
-        try:
+        with contextlib.suppress(RuntimeError):  # the loop is closed: Eva is exiting
             self._loop.call_soon_threadsafe(function, *args)
-        except RuntimeError:  # the loop is closed: Eva is exiting
-            pass
 
     # View
 
@@ -324,7 +323,7 @@ class TuiView:
             self.face.react("surprised", 1.2)  # woken up
 
     def status(self, state: str) -> None:
-        self._busy = state not in {"idle"}
+        self._busy = state != "idle"
         if state == "idle":
             listening = self._terminal is not None and self._terminal.listener.active
             self.face.mood = "listening" if listening else "neutral"
