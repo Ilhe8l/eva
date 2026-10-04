@@ -17,7 +17,8 @@ uv run pytest
 uv run ruff check . && uv run ruff format --check .
 ```
 
-CI runs the same checks, and a pull request can merge only when they pass.
+CI runs the same checks, and a pull request can merge only when they pass. To run
+ruff on every commit, install the hooks once with `uvx pre-commit install`.
 
 - Branch from `master` and open the pull request against it.
 - Write commit messages with [Conventional Commits](https://www.conventionalcommits.org)

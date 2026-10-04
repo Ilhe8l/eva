@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The required check for merging into master: lint, formatting and tests on the supported Python.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -24,6 +25,19 @@ jobs:
           enable-cache: true
       # The voice extra (torch, Whisper, Kokoro) is left out; its tests skip themselves.
       - run: uv sync --locked --extra test
-      - run: uv run ruff check .
+      - run: uv run ruff check . --output-format=github
       - run: uv run ruff format --check .
+      - run: uv run pytest
+
+  # Catches breakage on the next Python early, without blocking merges.
+  python-3-13:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv sync --locked --extra test
       - run: uv run pytest
