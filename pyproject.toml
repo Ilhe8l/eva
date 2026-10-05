@@ -20,14 +20,14 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 dependencies = [
-    "deepagents>=0.7.19,<1",
+    "deepagents>=0.7.21,<1",
     "langchain>=1.4,<2",
     "langchain-google-genai>=4.4,<5",
-    "langchain-openai>=1,<2",
+    "langchain-openai>=1.6.7,<2",
     "langgraph-checkpoint-sqlite>=3,<4",
     "pillow>=12.3",  # image and video frames for multimodal read_file
     "prompt-toolkit>=3.0.50,<4",
-    "python-dotenv>=1.2",
+    "python-dotenv>=1.2.4",
     "rich>=14",
     "textual>=8.2,<9",
 ]
@@ -54,7 +54,7 @@ eva = "eva.cli:main"
 packages = ["src/eva"]
 
 [dependency-groups]
-dev = ["ruff>=0.13"]
+dev = ["ruff>=0.16.10"]
 
 [tool.ruff]
 line-length = 120
