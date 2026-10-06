@@ -277,6 +277,19 @@ parameter. Eva writes the rest of `/memories/` freely, using any structure she
 likes, and reads those files on demand. Session summaries go to
 `/memories/sessions/`.
 
+## A plan with unfinished steps keeps Eva going
+
+Deep Agents 0.7 made `write_todos` opt-in, so Eva gets it from LangChain's
+`TodoListMiddleware`: she keeps a visible plan for work with three or more
+steps. The plan also catches a common failure of small models, which describe
+the next step ("I'll now open the file") and end the turn instead of calling
+the tool. `PlanFollowThroughMiddleware` (`adapters/plan_guard.py`) sees a reply
+without tool calls while the plan still has pending or in-progress steps, and
+repeats that model call once with a `[reminder]` listing them. The reminder is
+not saved to the thread, and it comes at most once per turn, so a genuine
+question to the user still gets through. Malformed tool calls are handled
+upstream: since langchain 1.4.3 they go back to the model as errors to retry.
+
 ## Models are named `provider:model`
 
 `init_chat_model` builds the model, so any LangChain provider works, e.g.
