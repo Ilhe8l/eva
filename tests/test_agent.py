@@ -9,6 +9,7 @@ from pydantic import Field
 from eva.adapters.agent import DeepAgentAdapter, Workspace
 from eva.adapters.followups import FollowUpStore
 from eva.adapters.lifecycle import SelfUpdater
+from eva.adapters.plan_guard import PLAN_NUDGE
 from eva.adapters.policy import ApprovalPolicy
 from eva.adapters.speech_mode import KICKOFF_NUDGE, SPEECH_OFF, SPEECH_ON, SpeechModeMiddleware
 from eva.adapters.steering import STEERING_PREFIX
@@ -280,7 +281,7 @@ def test_update_reminders_are_never_saved_to_the_thread(make_agent):
 def test_eva_can_share_a_plan(make_agent):
     make, _, _ = make_agent
     events = []
-    todos = [{"content": "Check the forecast", "status": "in_progress"}]
+    todos = [{"content": "Check the forecast", "status": "completed"}]
     agent = make(_call("write_todos", todos=todos), events=events)
     agent.ask("plan it")
     assert events[0] == ToolUse("write_todos", {"todos": todos}, call_id="call-write_todos")
@@ -300,3 +301,26 @@ def test_eva_is_told_the_date_on_every_model_call(make_agent):
     make, _, _ = make_agent
     make(AIMessage(content="Hi.")).ask("what day is it?")
     assert "Now: " in make.models[-1].prompts[0]
+
+
+def test_stopping_halfway_through_the_plan_gets_one_reminder(make_agent):
+    make, _, _ = make_agent
+    events = []
+    todos = [{"content": "List the files", "status": "in_progress"}]
+    agent = make(
+        _call("write_todos", todos=todos),
+        AIMessage(content="I'll list the files now."),  # describes the step instead of taking it
+        _call("ls", path="/"),
+        events=events,
+    )
+    step = agent.ask("what is in the project?")
+    assert PLAN_NUDGE.split("{")[0] in make.models[-1].prompts[2]
+    assert ToolUse("ls", {"path": "/"}, call_id="call-ls") in events
+    assert step.reply == "All done."
+
+
+def test_a_finished_plan_lets_the_answer_through(make_agent):
+    make, _, _ = make_agent
+    todos = [{"content": "List the files", "status": "completed"}]
+    step = make(_call("write_todos", todos=todos), AIMessage(content="Here they are.")).ask("list them")
+    assert step.reply == "Here they are."

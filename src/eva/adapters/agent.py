@@ -21,6 +21,7 @@ from langchain_core.tools import BaseTool
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Checkpointer, Command
 
+from eva.adapters.plan_guard import PlanFollowThroughMiddleware
 from eva.adapters.policy import BUILTIN_SKILLS_ROUTE, MEMORY_ROUTE, SCRATCH_ROUTE, SKILLS_ROUTE
 from eva.adapters.steering import SteeringInbox, SteeringMiddleware
 from eva.adapters.tools import REACTION_EVENT
@@ -132,7 +133,12 @@ class DeepAgentAdapter:
             skills=[BUILTIN_SKILLS_ROUTE, SKILLS_ROUTE],
             interrupt_on=interrupt_on,
             # Deep Agents 0.7 no longer plans with write_todos by default; Eva's terminal shows the plan.
-            middleware=[TodoListMiddleware(), *middleware, SteeringMiddleware(self.inbox)],
+            middleware=[
+                TodoListMiddleware(),
+                PlanFollowThroughMiddleware(),
+                *middleware,
+                SteeringMiddleware(self.inbox),
+            ],
             checkpointer=checkpointer,
             name="eva",
         )
