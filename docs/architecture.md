@@ -35,11 +35,15 @@ per background task (`application/tasks.py`). The graph uses:
 - `skills=["/builtin-skills/", "/skills/"]`, which are rescanned on every
   message;
 - `interrupt_on` from `adapters/policy.py`;
+- middleware, outermost first: `TodoListMiddleware` (the `write_todos` plan),
+  `PlanFollowThroughMiddleware` (a reminder when she stops halfway through the
+  plan), `SpeechModeMiddleware` (the time, the speech mode and update nudges)
+  and `SteeringMiddleware` (messages sent mid-task);
 - a SQLite checkpointer, so a turn paused for approval, and the whole
   conversation, survive restarts.
 
-Each thread streams its runs and reports tool use and chosen speech as
-events, labeled with their source.
+Each thread streams its runs and reports tool use, tool results, chosen
+speech and expressions as events, labeled with their source.
 
 ## Trust boundaries
 

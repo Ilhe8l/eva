@@ -100,13 +100,18 @@ Eva reads `.env`. Models are named `provider:model`:
 | Gemini | `google_genai:gemini-3.8-flash`, with `GEMINI_API_KEY` |
 | Others | any LangChain chat model, with its provider package |
 
+The `lmstudio:` prefix is a plain OpenAI-compatible client, so it also works
+with other local servers: point `EVA_LM_STUDIO_URL` at llama.cpp's
+`llama-server` (start it with `--jinja`, or tool calling will not work) or at
+Ollama's `http://localhost:11434/v1`.
+
 <details>
 <summary>All settings</summary>
 
 | Variable | Default | |
 | --- | --- | --- |
 | `EVA_MODEL` | required | Chat model, `provider:model` |
-| `EVA_LM_STUDIO_URL` | `http://localhost:1234/v1` | LM Studio server |
+| `EVA_LM_STUDIO_URL` | `http://localhost:1234/v1` | OpenAI-compatible server for `lmstudio:` models |
 | `EVA_WHISPER_MODEL` | `large-v3-turbo` | Speech recognition model |
 | `EVA_WHISPER_COMPUTE_TYPE` | `int8_float16` | Whisper precision on the GPU (`float16` for full precision) |
 | `EVA_VOICE` / `EVA_VOICE_LANGUAGE` | `af_heart` / `a` | [Kokoro voice](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md) |
