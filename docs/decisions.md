@@ -293,8 +293,11 @@ upstream: since langchain 1.4.3 they go back to the model as errors to retry.
 ## Models are named `provider:model`
 
 `init_chat_model` builds the model, so any LangChain provider works, e.g.
-`google_genai:gemini-3.8-flash`. The `lmstudio:<id>` prefix targets LM
-Studio's OpenAI-compatible server, the default for running everything locally. The session summarizer uses the same model.
+`google_genai:gemini-3.8-flash`. The `lmstudio:<id>` prefix builds a plain
+OpenAI-compatible client for `EVA_LM_STUDIO_URL`, LM Studio by default, the
+default for running everything locally. Other OpenAI-compatible servers work
+the same way; llama.cpp's server needs `--jinja` for tool calls. The session
+summarizer uses the same model.
 
 ## English only
 
