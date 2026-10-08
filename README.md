@@ -60,6 +60,7 @@ with half-block characters.
 You need Linux, Python 3.12, [uv](https://docs.astral.sh/uv/), and LM Studio
 running its local server with a tool-calling model. Qwen3.5 4B fits a 6 GB
 GPU next to the voice models ([settings](docs/decisions.md#a-local-setup-for-a-6-gb-gpu)).
+Python 3.13 is tested for text only: Kokoro, her voice, does not support it yet.
 
 ```bash
 git clone https://github.com/Ilhe8l/eva.git && cd eva
