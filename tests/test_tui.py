@@ -183,3 +183,15 @@ def test_panels_are_not_repainted_when_nothing_changed():
         return updates
 
     assert asyncio.run(run(scenario)) == []
+
+
+def test_a_long_command_is_cut_to_one_line_in_the_conversation():
+    async def scenario(view, pilot):
+        command = "python3 -c 'import json\nprint(json.dumps({\"a\": 1}))'"
+        view.show_request(ActionRequest("execute", {"command": command}), "")
+        await pilot.pause(0.2)
+        return text_of(view.app.query_one(ConversationLog)), text_of(view.app.query_one("#activity"))
+
+    chat, activity = asyncio.run(run(scenario))
+    assert "python3 -c 'import json…" in chat and "print(json.dumps" not in chat
+    assert "print(json.dumps" in activity  # the panel keeps the whole command
