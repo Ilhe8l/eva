@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0](https://github.com/Ilhe8l/eva/compare/v0.2.0...v0.3.0) (2026-10-08)
+
+
+### Features
+
+* Eva follows through when she stops halfway through her plan ([7757c66](https://github.com/Ilhe8l/eva/commit/7757c667e7cc7d6e28b84f2d813e169183dc8c0a))
+
+
+### Bug Fixes
+
+* tell Eva the current date and time on every model call ([2363d0f](https://github.com/Ilhe8l/eva/commit/2363d0f07b3f74370ff5ede58f9453a9b4cd44de))
+
+
+### Documentation
+
+* note that voice needs Python 3.12 ([2ce01d9](https://github.com/Ilhe8l/eva/commit/2ce01d9d95d801ec8ac97b22d7c8fe1f779e0d8e))
+* run the local model on llama.cpp or Ollama too ([88db8ec](https://github.com/Ilhe8l/eva/commit/88db8eccfe576c41722ecf25a2af657e27b7cf8c))
+
 ## [0.2.0](https://github.com/Ilhe8l/eva/compare/v0.1.0...v0.2.0) (2026-09-29)
 
 
