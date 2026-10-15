@@ -244,6 +244,13 @@ with `when` predicates (`adapters/policy.py`):
 
 `tests/test_agent.py` runs the real graph with a scripted model to keep this true.
 
+In the split screen the full request (command, file preview or diff) goes to
+the approval panel on the right. The conversation gets a single row that the
+renderer cuts to the pane's width, so a long or multi-line command never buries
+the chat. A multi-line command is marked with its line count, because its first
+line alone can look harmless. A file request shows the file name before its
+folder, so the cut drops the folder and keeps the name.
+
 ## One backend, several roots
 
 A `CompositeBackend` exposes the project at `/` through `LocalShellBackend`,

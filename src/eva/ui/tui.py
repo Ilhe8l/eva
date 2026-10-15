@@ -66,7 +66,6 @@ QUIET_WHEN_OK = {
 }  # success says nothing new
 TODO_MARKS = {"completed": ("✓", DIM), "in_progress": ("▸", "bold"), "pending": ("○", "")}
 APPROVAL_KEYS = {"y", "n", "a", "s"}
-NOTICE_WIDTH = 60
 LIST_ITEM = re.compile(r"([-*+]|\d+[.)])\s")
 
 
@@ -342,8 +341,7 @@ class TuiView:
         panel = Panel(body, title=title, title_align="left", border_style=YELLOW, subtitle="y yes · n no · a always")
         self._ui(self._activity, panel)
         if action:
-            line = f"{title}: {_one_line(_detail(action.name, action.arguments))} Approve? (details on the right)"
-            self._ui(self._chat, Text(line, style=YELLOW))
+            self._ui(self._chat, _notice(title, action))
 
     def ask(self, question: str) -> None:
         self._ui(self._set_question, question)
@@ -514,13 +512,19 @@ def _tool_line(name: str, arguments: dict, source: str | None) -> Text:
     return line
 
 
-def _one_line(text: str, width: int = NOTICE_WIDTH) -> str:
-    """The first line of `text`, cut to `width`: the full command is in the approval panel."""
-    lines = text.strip().splitlines() or [""]
-    line = lines[0].strip()
-    if len(line) > width or len(lines) > 1:
-        return line[: width - 1].rstrip() + "…"
-    return line + "."
+def _notice(title: str, action: ActionRequest) -> Text:
+    """One row in the conversation, cut to the pane: the full request is in the approval panel."""
+    if action.name in FILE_VERBS and (path := str(action.arguments.get("file_path", ""))):
+        file = PurePosixPath(path)
+        detail = f"{file.name} in {file.parent}"  # the name first, so a cut only loses the folder
+    else:
+        lines = _detail(action.name, action.arguments).strip().splitlines()
+        detail = lines[0].strip() if lines else ""
+        if len(lines) > 1:
+            detail = f"({len(lines)} lines) {detail}"
+    line = Text(f"Approve? {title}: ", style=YELLOW, no_wrap=True, overflow="ellipsis")
+    line.append(detail, style="bold")
+    return line
 
 
 def _detail(name: str, arguments: dict) -> str:
