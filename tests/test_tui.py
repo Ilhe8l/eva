@@ -185,13 +185,27 @@ def test_panels_are_not_repainted_when_nothing_changed():
     assert asyncio.run(run(scenario)) == []
 
 
-def test_a_long_command_is_cut_to_one_line_in_the_conversation():
+def test_an_approval_notice_takes_one_row_in_the_conversation():
     async def scenario(view, pilot):
-        command = "python3 -c 'import json\nprint(json.dumps({\"a\": 1}))'"
+        command = "cd /repo\nrm -rf build"
         view.show_request(ActionRequest("execute", {"command": command}), "")
+        view.show_request(ActionRequest("execute", {"command": "echo " + "x" * 300}), "")
         await pilot.pause(0.2)
-        return text_of(view.app.query_one(ConversationLog)), text_of(view.app.query_one("#activity"))
+        return view.app.query_one(ConversationLog), text_of(view.app.query_one("#activity"))
 
     chat, activity = asyncio.run(run(scenario))
-    assert "python3 -c 'import json…" in chat and "print(json.dumps" not in chat
-    assert "print(json.dumps" in activity  # the panel keeps the whole command
+    rows = text_of(chat).splitlines()
+    assert len(rows) == 2
+    assert "(2 lines) cd /repo" in rows[0] and "rm -rf" not in rows[0]
+    assert rows[1].endswith("…")
+    assert "rm -rf build" in activity  # the panel keeps the whole command
+
+
+def test_an_approval_notice_names_the_file_before_its_folder():
+    async def scenario(view, pilot):
+        path = "/srv/" + "nested/" * 30 + "settings_override.py"
+        view.show_request(ActionRequest("write_file", {"file_path": path, "content": ""}), "")
+        await pilot.pause(0.2)
+        return text_of(view.app.query_one(ConversationLog))
+
+    assert "Approve? Eva wants to run write_file: settings_override.py in /srv/nested" in asyncio.run(run(scenario))
