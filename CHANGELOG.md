@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/Ilhe8l/eva/compare/v0.3.0...v0.3.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* fit the approval notice to the conversation pane ([bf0b09d](https://github.com/Ilhe8l/eva/commit/bf0b09d1101b533c4f494382b87f0943b6f21965))
+* keep the approval notice in the conversation to one line ([8839ef6](https://github.com/Ilhe8l/eva/commit/8839ef667c2edde3e930716914c835da581cb204))
+
 ## [0.3.0](https://github.com/Ilhe8l/eva/compare/v0.2.0...v0.3.0) (2026-10-08)
 
 
